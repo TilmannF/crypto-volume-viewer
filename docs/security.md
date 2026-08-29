@@ -81,4 +81,4 @@ parsing pipeline.
 
 ## Responsible Disclosure
 
-No public responsible-disclosure contact is configured yet. Until one exists, security-sensitive findings should be handled privately with the repository owner.
+Email security-sensitive findings to **cryptovol@flgnr.com**. Do not file them as public GitHub issues. See [.github/SECURITY.md](../.github/SECURITY.md).

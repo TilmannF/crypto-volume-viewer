@@ -1,0 +1,69 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CRYPTOVOL_STATIC_FAT_FIXTURE: ${{ github.workspace }}/testdata/static/tcvc-aes-sha512-fat-files.hc
+  CRYPTOVOL_STATIC_FAT_LFN_FIXTURE: ${{ github.workspace }}/testdata/static/tcvc-aes-sha512-fat-lfn-unicode.hc
+  CRYPTOVOL_STATIC_EXFAT_LFN_FIXTURE: ${{ github.workspace }}/testdata/static/tcvc-aes-sha512-exfat-lfn-unicode.hc
+  CRYPTOVOL_STATIC_NTFS_LFN_FIXTURE: ${{ github.workspace }}/testdata/static/tcvc-aes-sha512-ntfs-lfn-unicode.hc
+  CRYPTOVOL_STATIC_CRYPTO_MATRIX_DIR: ${{ github.workspace }}/testdata/static/crypto-matrix
+
+jobs:
+  rust:
+    name: rust (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Linux Tauri/WebKit deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf
+      - name: fmt
+        if: runner.os == 'Linux'
+        run: cargo fmt --all --check
+      - name: clippy
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - name: test
+        run: cargo test --workspace --all-targets
+      - name: fixture tests (ignored)
+        run: cargo test --workspace --all-targets -- --ignored
+        # Static fixtures are in git. VeraCrypt CLI scripts are not run here.
+
+  gui:
+    name: gui frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/cryptovol-gui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/cryptovol-gui/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      # E2E is a local macOS Tauri/WebDriver suite. Not run in CI.
