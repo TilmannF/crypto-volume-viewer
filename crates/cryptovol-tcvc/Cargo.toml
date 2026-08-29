@@ -1,0 +1,31 @@
+[package]
+name = "cryptovol-tcvc"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+aes = { workspace = true, features = ["zeroize"] }
+# blake2 0.11.0-rc.6 is required (not 0.10.x) to match the digest 0.11.x
+# trait bounds used by pbkdf2 0.13 and sha2 0.11. The stable 0.10 line
+# uses digest 0.10.x, which is incompatible with our current dependency graph.
+blake2 = "0.11.0-rc.6"
+crc32fast = { workspace = true }
+cryptovol-core = { path = "../cryptovol-core" }
+pbkdf2 = { workspace = true }
+sha2 = { workspace = true }
+streebog = "0.11.0"
+whirlpool = "0.11.0"
+xts-mode = { workspace = true }
+zeroize = { workspace = true }
+
+[dev-dependencies]
+cryptovol-fs-fat = { path = "../cryptovol-fs-fat" }

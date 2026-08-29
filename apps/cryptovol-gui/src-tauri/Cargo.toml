@@ -1,0 +1,63 @@
+[package]
+name = "cryptovol-gui"
+version = "0.1.0"
+description = "Crypto Volume Viewer desktop GUI: a thin Tauri adapter over cryptovol-app"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+# The `_lib` suffix avoids a binary/library name collision on Windows; the
+# lib target also lets `tests/` integration tests exercise DTOs, error
+# mapping, and the session/job registries directly (mirroring the
+# cryptovol-cli main.rs/lib.rs split).
+[lib]
+name = "cryptovol_gui_lib"
+path = "src/lib.rs"
+
+[lints]
+workspace = true
+
+[features]
+# Enables the embedded WebDriver server used by the local Tauri E2E harness
+# (apps/cryptovol-gui/e2e/), plus tauri's own `custom-protocol` feature so a
+# plain `cargo build` embeds the built frontend (apps/cryptovol-gui/dist/)
+# instead of loading tauri.conf.json's devUrl (which only the `tauri` CLI's
+# `dev`/`build` wrappers otherwise arrange for). Never enabled by the
+# default feature set, by `npm run tauri dev`/`tauri build`, or by any
+# production build path -- see docs/gui-testing.md.
+e2e-webdriver = ["dep:tauri-plugin-wdio", "dep:tauri-plugin-wdio-webdriver", "tauri/custom-protocol", "dep:objc2", "dep:objc2-foundation"]
+
+[build-dependencies]
+tauri-build = { workspace = true, features = [] }
+
+[dependencies]
+cryptovol-app = { path = "../../../crates/cryptovol-app" }
+secrecy = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tauri = { workspace = true, features = [] }
+tauri-plugin-dialog = { workspace = true }
+tauri-plugin-wdio = { workspace = true, optional = true }
+tauri-plugin-wdio-webdriver = { workspace = true, optional = true }
+uuid = { workspace = true, features = ["v4"] }
+
+# macOS-only, e2e-webdriver-only: disables App Nap for the e2e-webdriver
+# harness's process (see src/app_nap.rs and docs/gui-testing.md caveat 10).
+# Already present in Cargo.lock as a transitive dependency of tauri/wry/tao
+# themselves, so this adds no new crate to the dependency tree -- only a
+# direct reference to it, at the same version, with the extra Cargo
+# features this specific use needs.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = { version = "0.6.4", optional = true }
+objc2-foundation = { version = "0.3.2", features = ["NSProcessInfo", "NSString"], optional = true }
+
+[dev-dependencies]
+aes = { workspace = true }
+crc32fast = { workspace = true }
+pbkdf2 = { workspace = true }
+sha2 = { workspace = true }
+tempfile = { workspace = true }
+xts-mode = { workspace = true }

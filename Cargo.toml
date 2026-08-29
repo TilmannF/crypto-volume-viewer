@@ -1,0 +1,49 @@
+[workspace]
+members = [
+    "apps/cryptovol-gui/src-tauri",
+    "crates/cryptovol-app",
+    "crates/cryptovol-cli",
+    "crates/cryptovol-core",
+    "crates/cryptovol-fs-exfat",
+    "crates/cryptovol-fs-fat",
+    "crates/cryptovol-fs-ntfs",
+    "crates/cryptovol-tcvc",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+rust-version = "1.85"
+license = "Apache-2.0"
+authors = ["Tilmann Felgner <cryptovol@flgnr.com>"]
+
+[workspace.dependencies]
+aes = "0.9.1"
+crc32fast = "1.5.0"
+pbkdf2 = "0.13.0"
+secrecy = "0.10.3"
+serde = "1"
+serde_json = "1"
+sha2 = "0.11.0"
+tauri = "2"
+tauri-build = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-wdio = "1.2.0"
+tauri-plugin-wdio-webdriver = "1.2.0"
+tempfile = "3"
+thiserror = "2.0.17"
+uuid = "1"
+xts-mode = "0.6.0"
+zeroize = "1.9.0"
+
+[workspace.lints.rust]
+missing_docs = "warn"
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+expect_used = "warn"
+panic = "warn"
+todo = "deny"
+unimplemented = "deny"
+unwrap_used = "warn"

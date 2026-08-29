@@ -1,0 +1,39 @@
+### OS/editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+### JetBrains IDE project files
+.idea/
+*.iml
+
+### Rust build output
+/target/
+**/target/
+
+### Local environment and logs
+.env
+.env.*
+*.log
+
+### Generated encrypted volume fixtures — kept out of Git by default.
+### Static committed fixtures under testdata/static/ are excluded from the
+### wildcard rules below via negation patterns.
+testdata/generated/
+.examples/
+*.hc
+!testdata/static/*.hc
+!testdata/static/crypto-matrix/*.hc
+*.tc
+!testdata/static/*.tc
+!testdata/static/crypto-matrix/*.tc
+
+### Local workflow artifacts
+.work/
+
+.claude/
+
+### Local macOS packaging output — built .app/.dmg artifacts are never committed.
+/dist/
