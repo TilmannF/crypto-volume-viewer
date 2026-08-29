@@ -398,7 +398,11 @@ fn info_missing_file_fails() {
     );
 }
 
+// Password-prompting CLI children hang on Windows CI: rpassword reads CONIN$
+// and CREATE_NO_WINDOW does not make that fail. Unix uses setsid so the prompt
+// errors immediately and these tests assert the auth-safe failure message.
 #[test]
+#[cfg(unix)]
 fn test_open_reports_failure_instead_of_placeholder() {
     let path = test_file_path("test-open-random");
     fs::write(&path, vec![0x5a; 1024]).expect("test file should be writable");
@@ -432,6 +436,7 @@ fn test_open_reports_failure_instead_of_placeholder() {
 }
 
 #[test]
+#[cfg(unix)]
 fn probe_fs_reports_auth_safe_failure_for_random_input() {
     let path = test_file_path("probe-fs-random");
     fs::write(&path, vec![0x5a; 1024]).expect("test file should be writable");
