@@ -14,7 +14,8 @@ env:
   CRYPTOVOL_STATIC_FAT_LFN_FIXTURE: ${{ github.workspace }}/testdata/static/tcvc-aes-sha512-fat-lfn-unicode.hc
   CRYPTOVOL_STATIC_EXFAT_LFN_FIXTURE: ${{ github.workspace }}/testdata/static/tcvc-aes-sha512-exfat-lfn-unicode.hc
   CRYPTOVOL_STATIC_NTFS_LFN_FIXTURE: ${{ github.workspace }}/testdata/static/tcvc-aes-sha512-ntfs-lfn-unicode.hc
-  CRYPTOVOL_STATIC_CRYPTO_MATRIX_DIR: ${{ github.workspace }}/testdata/static/crypto-matrix
+  # Do not set CRYPTOVOL_STATIC_CRYPTO_MATRIX_DIR here: those ignored tests
+  # autoprobing extra KDFs can run for tens of minutes on CI.
 
 jobs:
   rust:
