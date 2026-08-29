@@ -1,0 +1,22 @@
+name: Feature or limitation
+description: A gap in supported formats or GUI/CLI behavior
+title: "[feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Read-only, no mount, no FUSE, no write, no cracking. Features that violate that will be closed.
+  - type: textarea
+    id: ask
+    attributes:
+      label: What do you want
+    validations:
+      required: true
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Confirm
+      options:
+        - label: This is not password recovery, brute force, hidden-volume detection, or write support.
+          required: true

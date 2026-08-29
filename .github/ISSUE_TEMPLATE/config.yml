@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security report (private)
+    url: mailto:cryptovol@flgnr.com
+    about: Password leaks, key material in logs, or anything that could write to a container. Do not file that as a public issue.
+  - name: This is not a recovery tool
+    url: https://github.com/TilmannF/crypto-volume-viewer/blob/main/README.md
+    about: No brute force, wordlists, or “I forgot my password” help.

@@ -389,6 +389,8 @@ Expected behavior: the CLI reports unsupported parameters clearly without claimi
 
 Commit policy: generated containers for this profile stay out of Git by default.
 
+The committed fixtures under `testdata/static/` are large (on the order of **120 MB**). A full git clone downloads them. That is intentional so listing/extraction tests are reproducible without generating containers. Generated extra containers still belong in `testdata/generated/` and stay gitignored.
+
 ## Test Data Attribution
 
 The static committed fixtures under `testdata/static/` include one public-domain / openly licensed photographic image used solely as realistic binary payload for exercising FAT LFN/Unicode paths, metadata, and single-file extraction:

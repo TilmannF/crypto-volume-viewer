@@ -13,6 +13,12 @@ export default defineConfig(async () => ({
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
+  build: {
+    rollupOptions: {
+      // README screenshot helper (screenshot-browser.html) is dev-only.
+      input: fileURLToPath(new URL("./index.html", import.meta.url)),
+    },
+  },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
