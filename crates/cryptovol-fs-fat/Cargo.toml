@@ -1,0 +1,21 @@
+[package]
+name = "cryptovol-fs-fat"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+cryptovol-core = { path = "../cryptovol-core" }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+cryptovol-tcvc = { path = "../cryptovol-tcvc" }
+sha2 = "0.11.0"

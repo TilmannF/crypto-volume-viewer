@@ -1,0 +1,30 @@
+[package]
+name = "cryptovol-app"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+cryptovol-core = { path = "../cryptovol-core" }
+cryptovol-fs-exfat = { path = "../cryptovol-fs-exfat" }
+cryptovol-fs-fat = { path = "../cryptovol-fs-fat" }
+cryptovol-fs-ntfs = { path = "../cryptovol-fs-ntfs" }
+cryptovol-tcvc = { path = "../cryptovol-tcvc" }
+secrecy = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+aes = { workspace = true }
+crc32fast = { workspace = true }
+pbkdf2 = { workspace = true }
+sha2 = { workspace = true }
+xts-mode = { workspace = true }

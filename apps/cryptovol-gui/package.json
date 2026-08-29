@@ -1,0 +1,58 @@
+{
+  "name": "cryptovol-gui",
+  "private": true,
+  "version": "0.1.0",
+  "author": "Tilmann Felgner <cryptovol@flgnr.com>",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "tauri": "tauri",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "wdio run e2e/wdio.conf.ts",
+    "test:e2e:debug": "wdio run e2e/wdio.conf.ts --logLevel debug",
+    "test:e2e:headed": "CRYPTOVOL_E2E_HEADED=1 wdio run e2e/wdio.conf.ts"
+  },
+  "dependencies": {
+    "@emotion/react": "^11",
+    "@emotion/styled": "^11",
+    "@mui/icons-material": "^6",
+    "@mui/material": "^6",
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-dialog": "^2",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^26.1.0",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^4.6.0",
+    "@wdio/cli": "^9.29.1",
+    "@wdio/globals": "^9.29.1",
+    "@wdio/local-runner": "^9.29.1",
+    "@wdio/mocha-framework": "^9.29.1",
+    "@wdio/spec-reporter": "^9.29.1",
+    "@wdio/tauri-plugin": "^1.2.0",
+    "@wdio/tauri-service": "^1.2.0",
+    "jsdom": "^29.1.1",
+    "mocha": "^11.7.6",
+    "tsx": "^4.22.5",
+    "typescript": "~5.8.3",
+    "vite": "^7.0.4",
+    "vitest": "^4.1.9",
+    "webdriverio": "^9.29.1"
+  },
+  "overrides": {
+    "@wdio/native-utils": "2.5.0"
+  }
+}
