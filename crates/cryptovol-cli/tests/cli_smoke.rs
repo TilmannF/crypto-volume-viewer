@@ -15,8 +15,10 @@
 
 use std::fs;
 use std::path::PathBuf;
-use std::process::{Command, Output, Stdio};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::process::{Child, Command, Output, Stdio};
+use std::sync::mpsc;
+use std::thread;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use cryptovol_cli::commands::CliExitCode;
 use cryptovol_cli::{
@@ -24,6 +26,10 @@ use cryptovol_cli::{
 };
 use cryptovol_fs_exfat::{ExfatAttributes, ExfatEntry, ExfatTimestamp};
 use cryptovol_tcvc::FilesystemProbeCandidate;
+
+/// Password-prompting CLI children must fail fast without a TTY/console.
+/// Anything longer than this on CI is a hang (rpassword waiting on input).
+const CLI_CHILD_TIMEOUT: Duration = Duration::from_secs(60);
 
 fn new_command(args: &[&str]) -> Command {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_cryptovol"));
@@ -38,14 +44,56 @@ fn new_command(args: &[&str]) -> Command {
             });
         }
     }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // Match Unix setsid: detach from the parent console so rpassword
+        // cannot block GitHub Actions waiting for a password that never comes.
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
     cmd
 }
 
+fn kill_pid(id: u32) {
+    #[cfg(unix)]
+    {
+        let _ = Command::new("kill").args(["-9", &id.to_string()]).status();
+    }
+    #[cfg(windows)]
+    {
+        let _ = Command::new("taskkill")
+            .args(["/PID", &id.to_string(), "/F", "/T"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+}
+
+fn wait_child(child: Child) -> Output {
+    let id = child.id();
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || {
+        let _ = tx.send(child.wait_with_output());
+    });
+    match rx.recv_timeout(CLI_CHILD_TIMEOUT) {
+        Ok(Ok(output)) => output,
+        Ok(Err(err)) => panic!("cryptovol binary should run: {err}"),
+        Err(_) => {
+            kill_pid(id);
+            panic!("cryptovol child timed out after {CLI_CHILD_TIMEOUT:?}");
+        }
+    }
+}
+
 fn cryptovol(args: &[&str]) -> Output {
-    new_command(args)
+    let child = new_command(args)
         .stdin(Stdio::null())
-        .output()
-        .expect("cryptovol binary should run")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("cryptovol binary should run");
+    wait_child(child)
 }
 
 fn stdout(output: &Output) -> String {
@@ -405,9 +453,7 @@ fn probe_fs_reports_auth_safe_failure_for_random_input() {
             .expect("password input should be writable");
     }
 
-    let output = child
-        .wait_with_output()
-        .expect("cryptovol probe-fs should exit");
+    let output = wait_child(child);
 
     assert!(
         !stdout(&output).contains("not implemented"),
