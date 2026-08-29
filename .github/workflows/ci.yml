@@ -39,6 +39,11 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             patchelf
+      - name: Placeholder frontend dist for Tauri context
+        shell: bash
+        run: |
+          mkdir -p apps/cryptovol-gui/dist
+          printf '%s\n' '<!doctype html><title>ci</title>' > apps/cryptovol-gui/dist/index.html
       - name: fmt
         if: runner.os == 'Linux'
         run: cargo fmt --all --check
