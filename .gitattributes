@@ -1,0 +1,4 @@
+# Ground-truth payloads and encrypted fixtures must match byte-for-byte.
+# GitHub Actions checkouts convert text files to LF; FAT/exFAT/NTFS
+# fixtures contain CRLF. Treat testdata as binary.
+testdata/** -text
