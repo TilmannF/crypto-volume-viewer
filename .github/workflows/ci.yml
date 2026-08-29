@@ -52,8 +52,12 @@ jobs:
       - name: test
         run: cargo test --workspace --all-targets
       - name: fixture tests (ignored)
-        run: cargo test --workspace --all-targets -- --ignored
-        # Static fixtures are in git. VeraCrypt CLI scripts are not run here.
+        shell: bash
+        run: |
+          # Skip cryptovol-cli ignored tests: they spawn the binary and some
+          # omit --kdf, which forces a long KDF autoprobe. VeraCrypt CLI
+          # scripts are not run here.
+          cargo test --workspace --all-targets --exclude cryptovol-cli -- --ignored
 
   gui:
     name: gui frontend
