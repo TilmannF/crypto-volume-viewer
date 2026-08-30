@@ -25,7 +25,7 @@
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.2.8"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
@@ -35,7 +35,7 @@
     "@types/mocha": "^10.0.10",
     "@types/node": "^26.1.0",
     "@types/react": "^19.1.8",
-    "@types/react-dom": "^19.1.6",
+    "@types/react-dom": "^19.2.5",
     "@vitejs/plugin-react": "^4.6.0",
     "@wdio/cli": "^9.29.1",
     "@wdio/globals": "^9.29.1",
