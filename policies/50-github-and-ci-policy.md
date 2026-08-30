@@ -43,19 +43,13 @@ It does not replace:
 
 Those docs stay the how-to. This file is the MUST/MUST NOT.
 
-## 3. Visibility and consent
+## 3. Canonical repository
 
-The repository is private until a human explicitly says to make it public.
+The canonical source repository is public at a stable HTTPS URL.
 
-Agents MUST NOT:
+Agents MUST NOT change repository visibility, rename the canonical remote, or stand up a second “official” repository.
 
-* Change repository visibility.
-* Create a public fork of this repository.
-* Publish a GitHub Release or a version tag as “the public v0.1.0” without that explicit human sentence.
-
-The consent phrase for first public cut is a human message equivalent to: make public and cut v0.1.0. Anything short of that is not consent.
-
-Once the repository has been public, agents MUST treat `origin/main` and published tags as append-only (see sections 5 and 6).
+Changing visibility is an exceptional operational act (incident, legal). It requires a human. It is not part of normal development.
 
 ## 4. Default branch and pull requests
 
@@ -63,17 +57,17 @@ The default branch is `main`.
 
 Changes that land on `origin/main` MUST go through a pull request.
 
-Agents MUST NOT `git push` to `origin/main`, even if GitHub settings still allow it. Open a branch and a PR.
+Agents MUST NOT `git push` to `origin/main`. Open a branch and a PR.
 
-Humans MAY still push to `main` until branch protection is turned on. That exception is for humans, not agents.
+GitHub MUST enforce on `main`:
 
-GitHub settings SHOULD eventually enforce:
-
-* Pull request required before merging to `main`.
+* Pull request required before merging.
 * Named required status checks matching the `ci` workflow jobs.
-* No force-push to `main`.
+* No force-push.
 * No deletion of `main`.
-* Administrators included (no god-mode bypass) once the repo is public.
+* Rules apply to administrators (no god-mode bypass).
+
+Agents MUST follow these rules even when GitHub settings fail to enforce them.
 
 A second human reviewer is SHOULD once there is more than one maintainer. A solo maintainer MAY merge their own PR after CI is green.
 
@@ -89,17 +83,9 @@ On a feature branch, agents MAY make many small commits. Those commits are dispo
 
 Squash-merge of a PR is not a history rewrite. Force-push of `origin/main` is.
 
-Agents MUST NOT force-push `origin/main`.
+`origin/main` MUST NOT be force-pushed. Published tags MUST NOT be deleted or moved.
 
-While the repository is **private**, a human MAY rewrite `main` (including a one-time pre-public squash) only with explicit human consent in that conversation. Agents MUST NOT do this unprompted.
-
-Once the repository is **public**:
-
-* `origin/main` MUST NOT be force-pushed.
-* Published tags MUST NOT be deleted or moved.
-* The first public commit is the start of append-only history.
-
-A one-time “initial public commit” squash is allowed only **before** visibility is flipped.
+Exception: a human MAY authorize a force-push of `main` or a tag move as incident response (leaked secret, legal takedown). Agents MUST NOT do this unprompted.
 
 ## 6. Tags and GitHub Releases
 
@@ -111,7 +97,7 @@ A GitHub Release MUST:
 * Include a human-readable changelog of functional and security-relevant changes.
 * Include a SHA-256 (or stronger) checksum for every attached binary asset.
 
-Agents MUST NOT delete, retag, or overwrite a tag that has existed on `origin`.
+Agents MUST NOT create a version tag or GitHub Release unless a human asked for that release. They MUST NOT delete, retag, or overwrite a tag that has existed on `origin`.
 
 CI MUST NOT be the job that Developer-ID-signs or notarizes macOS builds. Signing stays on the maintainer Mac until this policy is explicitly amended.
 
@@ -130,7 +116,7 @@ On `pull_request` and on `push` to `main`, CI MUST run the full current matrix:
 * `rust` on `ubuntu-latest`, `macos-latest`, and `windows-latest`
 * `gui frontend` typecheck and unit tests on Linux
 
-Agents MUST NOT drop an OS from that matrix to “make CI faster.” A private runner, if added later, does not change this requirement.
+Agents MUST NOT drop an OS from that matrix to “make CI faster.” Runner hardware does not change this requirement.
 
 `strategy.fail-fast` MUST be `false` for the rust matrix so one OS failure still reports the others.
 
@@ -189,7 +175,7 @@ from `apps/cryptovol-gui`.
 
 A Tauri `generate_context!` build in CI MUST have a placeholder `apps/cryptovol-gui/dist/index.html`. Agents MUST NOT require a full frontend production build just to satisfy clippy.
 
-The rust toolchain channel MAY be `stable`. The *action* that installs it MUST still be SHA-pinned (section 11). A `rust-toolchain.toml` pin is SHOULD, not required yet.
+The rust toolchain channel MAY be `stable`. The *action* that installs it MUST still be SHA-pinned (section 11). A `rust-toolchain.toml` pin is SHOULD.
 
 Node MUST be an explicit LTS major (currently 22), not `node-version: node`.
 
@@ -218,7 +204,7 @@ Every third-party `uses:` MUST be pinned to a full 40-character commit SHA, with
 
 Mutable tags (`@v4`, `@stable`, `@main`) MUST NOT appear as the pin.
 
-While the repository is private, a human MAY grant a one-off exception in that conversation. Agents MUST NOT take the exception themselves. Dependabot PRs are the normal way to move pins.
+Exception: a human MAY grant a documented, time-bounded exception to SHA pinning. Agents MUST NOT take that exception themselves. Dependabot PRs are the normal way to move pins.
 
 Prefer first-party `actions/*` and well-known installers (`dtolnay/rust-toolchain`). New marketplace actions need a human reason.
 
@@ -240,7 +226,7 @@ Untrusted context (`github.event.pull_request.title`, branch names, commit messa
 
 Fork PRs MUST NOT receive repository secrets (GitHub default). Keep it.
 
-Self-hosted runners MUST NOT be attached to a public copy of this repository. A private runner for faster builds is allowed and does not relax the matrix, timeout, or secret rules.
+Self-hosted runners MUST NOT execute untrusted `pull_request` code from forks. They do not relax the matrix, timeout, or secret rules.
 
 ### Workflow review
 
@@ -282,7 +268,7 @@ Agents MUST NOT:
 2. Force-push `origin/main`.
 3. Change repository visibility.
 4. Delete or move a tag that exists on `origin`.
-5. Cut a public GitHub Release without explicit human consent.
+5. Create a version tag or GitHub Release unless a human asked for that release.
 6. Add signing or notarization secrets to Actions.
 7. Set `CRYPTOVOL_STATIC_CRYPTO_MATRIX_DIR` in CI.
 8. Run `cryptovol-cli --ignored` tests in CI.
@@ -297,7 +283,7 @@ If CI hangs, agents MUST treat that as a failure: cancel, bound the process or s
 
 Human review is required before:
 
-* Making the repository public
+* Changing repository visibility
 * Force-pushing `main`
 * Deleting or moving a published tag
 * Adding Actions secrets
