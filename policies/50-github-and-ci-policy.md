@@ -175,7 +175,7 @@ from `apps/cryptovol-gui`.
 
 A Tauri `generate_context!` build in CI MUST have a placeholder `apps/cryptovol-gui/dist/index.html`. Agents MUST NOT require a full frontend production build just to satisfy clippy.
 
-The rust toolchain channel MAY be `stable`. The *action* that installs it MUST still be SHA-pinned (section 11). A `rust-toolchain.toml` pin is SHOULD.
+The rust toolchain channel MAY be `stable`. The *action* that installs it MUST still be SHA-pinned, on `master` history, with an explicit `toolchain:` input (section 11). A `rust-toolchain.toml` pin is SHOULD.
 
 Node MUST be an explicit LTS major (currently 22), not `node-version: node`.
 
@@ -207,6 +207,8 @@ Mutable tags (`@v4`, `@stable`, `@main`) MUST NOT appear as the pin.
 Exception: a human MAY grant a documented, time-bounded exception to SHA pinning. Agents MUST NOT take that exception themselves. Dependabot PRs are the normal way to move pins.
 
 Prefer first-party `actions/*` and well-known installers (`dtolnay/rust-toolchain`). New marketplace actions need a human reason.
+
+`dtolnay/rust-toolchain` MUST be pinned to a `master` commit SHA and MUST pass `toolchain:` in `with:`. Pinning a `stable`/`nightly` branch tip without that input is incorrect for this action.
 
 ### Checkout
 
