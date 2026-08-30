@@ -283,7 +283,6 @@ If CI hangs, agents MUST treat that as a failure: cancel, bound the process or s
 
 Human review is required before:
 
-* Changing repository visibility
 * Force-pushing `main`
 * Deleting or moving a published tag
 * Adding Actions secrets

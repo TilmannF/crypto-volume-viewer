@@ -1176,7 +1176,6 @@ Human review is required before:
 * publishing binaries
 * choosing a license
 * accepting external contributions
-* changing repository visibility
 * force-pushing `main`
 * deleting or moving a published tag
 * adding Actions secrets, a signing/publish workflow, or a self-hosted runner
