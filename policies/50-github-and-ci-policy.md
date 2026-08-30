@@ -258,6 +258,15 @@ The repository MUST have `.github/dependabot.yml` covering:
 
 Version updates SHOULD wait several days after a release (explicit `cooldown`; security updates stay immediate).
 
+Dependabot MUST group updates per ecosystem. Each ecosystem MUST define:
+
+* one `groups` rule with `applies-to: version-updates` and `patterns: ["*"]`
+* one `groups` rule with `applies-to: security-updates` and `patterns: ["*"]`
+
+So a weekly run opens at most one version-update PR and one security-update PR per ecosystem, not one PR per dependency. Ungrouped leftover PRs mean the group rule did not match; fix the config, do not accept a new flood.
+
+`open-pull-requests-limit` MUST stay small (about 5). It is a backstop, not a substitute for grouping.
+
 Dependabot MUST open PRs. Agents MUST NOT auto-merge GitHub Actions pin bumps. A human SHOULD glance at action SHA PRs (impostor-commit risk). Cargo/npm patch PRs MAY be merged after CI is green.
 
 ## 14. Agent operating rules (this domain)
