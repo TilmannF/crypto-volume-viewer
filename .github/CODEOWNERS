@@ -1,0 +1,4 @@
+# Workflows and Dependabot are supply-chain sensitive.
+# Requiring reviews from this file in GitHub settings is optional
+# until there is more than one maintainer.
+/.github/ @TilmannF
