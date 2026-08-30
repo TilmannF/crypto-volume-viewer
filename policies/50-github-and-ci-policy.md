@@ -128,7 +128,7 @@ Every job MUST set `timeout-minutes`. Hanging is a failure.
 
 Defaults unless a documented reason exists:
 
-* rust matrix jobs: `30`
+* rust matrix jobs: `45` (Windows hosted clippy + test + fixtures can take ~20–35 min)
 * gui frontend job: `15`
 
 A job that can block on a password prompt, a TTY, or a KDF autoprobe MUST also bound the *process* (test helper timeout, `timeout(1)`, or skip on that OS). GitHub’s 6-hour default is not a hang detector.
