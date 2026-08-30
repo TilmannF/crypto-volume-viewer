@@ -8,7 +8,11 @@ Before modifying code, read:
 2. `policies/10-rust-project-structure-policy.md`
 3. `policies/20-rust-code-policy.md`
 
-These policies are normative. In case of conflict, the more specific Rust policy overrides the general engineering policy.
+When changing GitHub settings, workflows, Dependabot, git history, tags, releases, or repository visibility, also read:
+
+4. `policies/50-github-and-ci-policy.md`
+
+These policies are normative. In case of conflict, the more specific policy wins for its scope. The Rust policies override the general engineering policy for Rust. The GitHub/CI policy overrides the general engineering policy for forge and CI.
 
 ## Project Name
 
@@ -1106,11 +1110,13 @@ Do not assume:
 
 Windows must be considered from the start.
 
-CI should eventually run on:
+CI MUST run on:
 
 * ubuntu-latest
 * macos-latest
 * windows-latest
+
+See `policies/50-github-and-ci-policy.md`.
 
 ## Code Style
 
@@ -1155,6 +1161,8 @@ big update
 ai changes
 ```
 
+Feature-branch commits MAY be noisy. `main` MUST be squash-merged: one PR, one commit, a message that states what and why. See `policies/50-github-and-ci-policy.md`.
+
 ## Human Review Checkpoints
 
 Human review is required before:
@@ -1168,6 +1176,9 @@ Human review is required before:
 * publishing binaries
 * choosing a license
 * accepting external contributions
+* force-pushing `main`
+* deleting or moving a published tag
+* adding Actions secrets, a signing/publish workflow, or a self-hosted runner
 
 ## Current Default Decisions
 

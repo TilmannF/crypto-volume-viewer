@@ -2,7 +2,7 @@
 
 This policy defines general engineering rules for this repository.
 
-Rust-specific rules are defined in separate Rust policy files. When rules conflict, the more specific policy wins.
+Language- and domain-specific rules live in numbered policy files. When rules conflict, the more specific policy wins for its scope (Rust, frontend, Tauri, GitHub/CI).
 
 ## 1. Normative Language
 
