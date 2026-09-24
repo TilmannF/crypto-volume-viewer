@@ -199,7 +199,7 @@ The repository default Actions token SHOULD be read-only in GitHub settings.
 Every third-party `uses:` MUST be pinned to a full 40-character commit SHA, with a comment naming the tag or version:
 
 ```yaml
-- uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+- uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 ```
 
 Mutable tags (`@v4`, `@stable`, `@main`) MUST NOT appear as the pin.
@@ -256,18 +256,23 @@ The repository MUST have `.github/dependabot.yml` covering:
 * `cargo` at `/`
 * `npm` at `/apps/cryptovol-gui`
 
-Version updates SHOULD wait several days after a release (explicit `cooldown`; security updates stay immediate).
+Version updates MUST run on a `monthly` schedule. Version updates SHOULD wait several days after a release (explicit `cooldown`). Security updates are not bound to the schedule and open immediately.
 
-Dependabot MUST group updates per ecosystem. Each ecosystem MUST define:
+Dependabot MUST group updates per ecosystem, so each run opens a few grouped PRs, not one PR per dependency:
 
-* one `groups` rule with `applies-to: version-updates` and `patterns: ["*"]`
-* one `groups` rule with `applies-to: security-updates` and `patterns: ["*"]`
+* `cargo` and `npm` MUST define a `minor-and-patch` group (`applies-to: version-updates`, `patterns: ["*"]`, `update-types: ["minor", "patch"]`) and a `major` group (same, `update-types: ["major"]`). Majors often need code changes; a separate group keeps them from blocking routine updates.
+* `github-actions` MUST define one version-update group with `patterns: ["*"]` and no `update-types`. Some pins track a branch (`dtolnay/rust-toolchain` `# master`) and have no semver to split on.
+* Every ecosystem MUST define one `groups` rule with `applies-to: security-updates` and `patterns: ["*"]`.
 
-So a weekly run opens at most one version-update PR and one security-update PR per ecosystem, not one PR per dependency. Ungrouped leftover PRs mean the group rule did not match; fix the config, do not accept a new flood.
+Semver treats `0.x` → `0.(x+1)` as `minor`, so breaking bumps of `0.x` crates (for example the RustCrypto crates) land in `minor-and-patch`. If one breaks the group's CI, fix it on the group PR or `@dependabot ignore` that dependency; do not drop the group.
+
+Ungrouped leftover PRs mean a group rule did not match; fix the config, do not accept a new flood.
 
 `open-pull-requests-limit` MUST stay small (about 5). It is a backstop, not a substitute for grouping.
 
-Dependabot MUST open PRs. Agents MUST NOT auto-merge GitHub Actions pin bumps. A human SHOULD glance at action SHA PRs (impostor-commit risk). Cargo/npm patch PRs MAY be merged after CI is green.
+Dependabot MUST open PRs. Dependency updates MUST land through Dependabot PRs, not hand-made batch PRs, unless a group PR needs a code fix pushed onto it. Agents MUST NOT auto-merge GitHub Actions pin bumps. A human SHOULD glance at action SHA PRs (impostor-commit risk). Cargo/npm `minor-and-patch` PRs MAY be merged after CI is green. `major` PRs need a human to review the upstream changelogs.
+
+Maintenance cadence: once a month, a maintainer reviews the open Dependabot PRs and merges the green ones. High-severity security PRs SHOULD be handled when they open, not at the next monthly review.
 
 ## 14. Agent operating rules (this domain)
 

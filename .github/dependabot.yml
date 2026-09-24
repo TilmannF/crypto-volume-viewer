@@ -3,7 +3,7 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     open-pull-requests-limit: 5
     cooldown:
       default-days: 7
@@ -11,7 +11,9 @@ updates:
       prefix: "chore"
       include: "scope"
     groups:
-      version-updates:
+      # Action pins are SHAs; some track a branch (`# master`) with no semver,
+      # so update-types cannot split them. One group, reviewed by a human.
+      all-actions:
         applies-to: version-updates
         patterns:
           - "*"
@@ -23,7 +25,7 @@ updates:
   - package-ecosystem: cargo
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     open-pull-requests-limit: 5
     cooldown:
       default-days: 3
@@ -32,10 +34,19 @@ updates:
       prefix: "chore"
       include: "scope"
     groups:
-      version-updates:
+      minor-and-patch:
         applies-to: version-updates
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      major:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - "major"
       security-updates:
         applies-to: security-updates
         patterns:
@@ -44,7 +55,7 @@ updates:
   - package-ecosystem: npm
     directory: /apps/cryptovol-gui
     schedule:
-      interval: weekly
+      interval: monthly
     open-pull-requests-limit: 5
     cooldown:
       default-days: 3
@@ -53,10 +64,19 @@ updates:
       prefix: "chore"
       include: "scope"
     groups:
-      version-updates:
+      minor-and-patch:
         applies-to: version-updates
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      major:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - "major"
       security-updates:
         applies-to: security-updates
         patterns:
