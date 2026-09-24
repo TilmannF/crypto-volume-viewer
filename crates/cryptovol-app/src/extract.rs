@@ -4,8 +4,7 @@
 use crate::cancellation::CancellationToken;
 use crate::error::AppError;
 use cryptovol_core::EXTRACTION_CHUNK_SIZE;
-use std::fs::File;
-use std::io::{Read, Write};
+use std::io::{ErrorKind, Read, Write};
 use std::path::{Path, PathBuf};
 use tempfile::NamedTempFile;
 
@@ -176,6 +175,7 @@ impl From<WriteError> for AppError {
 pub struct StreamingWriter {
     tmp: NamedTempFile,
     dst: PathBuf,
+    overwrite: bool,
 }
 
 /// Opens a streaming destination writer, enforcing overwrite and parent policy.
@@ -232,11 +232,17 @@ pub fn open_streaming_writer(
     Ok(StreamingWriter {
         tmp,
         dst: dst.to_path_buf(),
+        overwrite,
     })
 }
 
 impl StreamingWriter {
     /// Atomically persists the written bytes to the destination path.
+    ///
+    /// Without `overwrite`, the rename refuses to replace a destination that
+    /// appeared after [`open_streaming_writer`] checked it (for example one
+    /// created by another process mid-extraction). With `overwrite`, an
+    /// existing destination is replaced.
     ///
     /// On success the destination file contains exactly what was written.
     /// On failure the temp file is dropped (auto-cleaned); the destination is
@@ -244,15 +250,27 @@ impl StreamingWriter {
     ///
     /// # Errors
     ///
-    /// Returns [`WriteError::AtomicPersist`] if the rename fails.
+    /// Returns [`WriteError::DestinationExists`] if the destination appeared
+    /// since the writer was opened and `overwrite` was not requested, or
+    /// [`WriteError::AtomicPersist`] if the rename fails for another reason.
     pub fn finish(self) -> Result<(), WriteError> {
-        self.tmp
-            .persist(&self.dst)
-            .map(|_: File| ())
-            .map_err(|source| WriteError::AtomicPersist {
-                path: self.dst.clone(),
+        let persisted = if self.overwrite {
+            self.tmp.persist(&self.dst)
+        } else {
+            self.tmp.persist_noclobber(&self.dst)
+        };
+        match persisted {
+            Ok(_) => Ok(()),
+            Err(source) if !self.overwrite && source.error.kind() == ErrorKind::AlreadyExists => {
+                // Dropping the reclaimed temp file deletes it.
+                drop(source.file);
+                Err(WriteError::DestinationExists(self.dst))
+            }
+            Err(source) => Err(WriteError::AtomicPersist {
+                path: self.dst,
                 source,
-            })
+            }),
+        }
     }
 }
 
@@ -325,8 +343,9 @@ pub struct ExtractOptions {
 ///
 /// Returns [`AppError::Cancelled`] if `cancellation_token` is cancelled
 /// before the first chunk or between chunks. Returns [`AppError::Io`] for
-/// source read failures, and [`AppError::ExtractionFailed`] for destination
-/// write or persist failures.
+/// source read failures, [`AppError::InvalidInput`] if the destination
+/// appeared mid-copy without overwrite, and [`AppError::ExtractionFailed`]
+/// for other destination write or persist failures.
 pub fn copy_with_progress_and_cancellation<R: Read>(
     mut reader: R,
     writer: StreamingWriter,
@@ -433,7 +452,7 @@ impl Write for ProgressWriter<'_> {
 /// Returns [`AppError::Cancelled`] if `cancellation_token` is cancelled
 /// before writing starts or between chunks. Returns `AppError::from(err)`
 /// for any other error `read_into` produces, and propagates
-/// [`StreamingWriter::finish`] failures as [`AppError::ExtractionFailed`].
+/// [`StreamingWriter::finish`] failures via `From<WriteError> for AppError`.
 pub(crate) fn extract_via_writer<E>(
     writer: StreamingWriter,
     source_path: &str,

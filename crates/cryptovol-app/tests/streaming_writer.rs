@@ -124,3 +124,49 @@ fn drop_without_finish_leaves_no_dest() {
         "destination must not exist after drop without finish"
     );
 }
+
+fn dir_entry_names(dir: &tempfile::TempDir) -> Vec<std::ffi::OsString> {
+    std::fs::read_dir(dir.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect()
+}
+
+#[test]
+fn finish_refuses_destination_created_after_open_without_overwrite() {
+    let dir = tmp();
+    let dst = dir.path().join("out.bin");
+
+    let mut writer = open_streaming_writer(&dst, false, false).expect("open");
+    writer.write_all(b"extracted").unwrap();
+    // Another process creates the destination while extraction is running.
+    std::fs::write(&dst, b"external").unwrap();
+
+    let result = writer.finish();
+
+    assert_eq!(result, Err(WriteError::DestinationExists(dst.clone())));
+    assert_eq!(std::fs::read(&dst).unwrap(), b"external");
+    assert_eq!(
+        dir_entry_names(&dir),
+        vec![std::ffi::OsString::from("out.bin")],
+        "the temp file must be removed after a refused persist"
+    );
+}
+
+#[test]
+fn finish_replaces_destination_created_after_open_with_overwrite() {
+    let dir = tmp();
+    let dst = dir.path().join("out.bin");
+
+    let mut writer = open_streaming_writer(&dst, true, false).expect("open");
+    writer.write_all(b"extracted").unwrap();
+    std::fs::write(&dst, b"external").unwrap();
+
+    writer.finish().expect("finish");
+
+    assert_eq!(std::fs::read(&dst).unwrap(), b"extracted");
+    assert_eq!(
+        dir_entry_names(&dir),
+        vec![std::ffi::OsString::from("out.bin")]
+    );
+}
