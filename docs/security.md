@@ -34,7 +34,7 @@ The tool does not automatically write decrypted previews. `extract` writes only 
 
 ## Extraction Risks
 
-Extracted files are no longer protected by the source container encryption. Users are responsible for destination location, permissions, backup behavior, and later deletion. Extraction refuses to overwrite normal files unless `--overwrite` is supplied, can create missing parents only with `--parents`, and rejects symlink destinations.
+Extracted files are no longer protected by the source container encryption. Users are responsible for destination location, permissions, backup behavior, and later deletion. Extraction refuses to overwrite normal files unless `--overwrite` is supplied, can create missing parents only with `--parents`, and rejects symlink destinations. The no-overwrite rule also holds at the final rename: a destination that another process creates while extraction is running is never replaced without `--overwrite` (see [streaming-extraction.md](streaming-extraction.md)).
 
 ## Filesystem Parsers
 
