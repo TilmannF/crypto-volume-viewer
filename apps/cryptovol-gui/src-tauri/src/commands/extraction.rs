@@ -7,6 +7,7 @@
 //! `#[tauri::command]` wrappers are the only place that touch threading or
 //! `AppHandle`/event emission, gluing the two together.
 
+use crate::commands::run_blocking;
 use crate::dto::error::{GuiErrorDto, DIRECTORY_EXTRACTION_UNSUPPORTED, SESSION_NOT_FOUND};
 use crate::dto::extraction::{ExtractFileRequestDto, ExtractStartedDto};
 use crate::events::{
@@ -14,8 +15,28 @@ use crate::events::{
     ExtractStartedEvent, ExtractionEvent,
 };
 use crate::state::{GuiState, JobId, SessionId};
-use cryptovol_app::{AppError, CancellationToken, ExtractOptions, ProgressEvent};
+use cryptovol_app::{AppError, CancellationToken, ExtractOptions, ProgressEvent, VolumeSession};
+use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager};
+
+/// A validated, registered extraction job that has not started copying yet.
+///
+/// Carries the session handle and the exact `CancellationToken` stored in the
+/// job registry, so the thread running the copy needs no further registry
+/// lookups and a later `cancel_extract`/`close_session` stops that copy.
+#[derive(Debug)]
+pub struct PreparedExtraction {
+    /// The response returned to the frontend.
+    pub started: ExtractStartedDto,
+    /// The registered job's id.
+    pub job_id: JobId,
+    /// The session that owns the job.
+    pub session_id: SessionId,
+    /// The session to extract from, kept alive for the copy's duration.
+    pub session: Arc<VolumeSession>,
+    /// The token stored for this job in the registry.
+    pub cancellation_token: CancellationToken,
+}
 
 /// Validates `request` and registers a new extraction job, without starting
 /// the copy itself. Returns immediately.
@@ -23,18 +44,20 @@ use tauri::{AppHandle, Emitter, Manager};
 /// # Errors
 ///
 /// Returns a [`GuiErrorDto`] with code `session_not_found` if
-/// `request.session_id` is unknown, `directory_extraction_unsupported` if
-/// `request.source_path` names a directory, or another mapped
-/// [`AppError`] if `stat` itself fails.
+/// `request.session_id` is unknown or is closed before the job is
+/// registered, `directory_extraction_unsupported` if `request.source_path`
+/// names a directory, or another mapped [`AppError`] if `stat` itself fails.
 pub fn extract_file_impl(
     state: &GuiState,
     request: &ExtractFileRequestDto,
-) -> Result<ExtractStartedDto, GuiErrorDto> {
+) -> Result<PreparedExtraction, GuiErrorDto> {
     let session_id = SessionId::from(request.session_id.as_str());
 
-    let entry = state
-        .with_session(&session_id, |session| session.stat(&request.source_path))
-        .ok_or_else(|| GuiErrorDto::new(SESSION_NOT_FOUND, "no open session with that id"))?
+    let session = state
+        .session(&session_id)
+        .ok_or_else(|| GuiErrorDto::new(SESSION_NOT_FOUND, "no open session with that id"))?;
+    let entry = session
+        .stat(&request.source_path)
         .map_err(GuiErrorDto::from)?;
 
     if entry.is_dir {
@@ -44,52 +67,57 @@ pub fn extract_file_impl(
         ));
     }
 
-    let job_id = state.insert_job(session_id.clone(), CancellationToken::new());
+    let cancellation_token = CancellationToken::new();
+    let job_id = state.insert_job(session_id.clone(), cancellation_token.clone())?;
 
-    Ok(ExtractStartedDto {
-        job_id: job_id.as_str().to_string(),
-        session_id: session_id.as_str().to_string(),
-        source_path: request.source_path.clone(),
-        destination_path: request.destination_path.clone(),
-        total_bytes: Some(entry.size),
+    Ok(PreparedExtraction {
+        started: ExtractStartedDto {
+            job_id: job_id.as_str().to_string(),
+            session_id: session_id.as_str().to_string(),
+            source_path: request.source_path.clone(),
+            destination_path: request.destination_path.clone(),
+            total_bytes: Some(entry.size),
+        },
+        job_id,
+        session_id,
+        session,
+        cancellation_token,
     })
 }
 
-/// Runs the extraction for an already-registered job to completion,
-/// reporting each lifecycle event to `on_event`, and removes the job from
-/// `state`'s registry once it reaches a terminal state (finished, cancelled,
-/// or failed). Does nothing if the session has since been closed.
+/// Runs a prepared extraction job to completion, reporting each lifecycle
+/// event to `on_event`, and removes the job from `state`'s registry once it
+/// reaches a terminal state. Every call emits exactly one terminal event:
+/// `Finished`, `Cancelled` (also when the session is closed mid-copy, since
+/// `close_session` cancels the job's token), or `Failed`.
 pub fn run_extraction_job(
     state: &GuiState,
-    job_id: &JobId,
-    session_id: &SessionId,
+    job: &PreparedExtraction,
     request: &ExtractFileRequestDto,
-    cancellation_token: CancellationToken,
     mut on_event: impl FnMut(ExtractionEvent),
 ) {
-    let result = state.with_session(session_id, |session| {
-        session.extract_file(
-            &request.source_path,
-            &request.destination_path,
-            ExtractOptions {
-                overwrite: request.overwrite,
-                parents: request.parents,
-                cancellation_token: Some(cancellation_token),
-            },
-            |event| on_event(map_progress_event(job_id, session_id, event)),
-        )
-    });
+    let job_id = &job.job_id;
+    let session_id = &job.session_id;
+    let result = job.session.extract_file(
+        &request.source_path,
+        &request.destination_path,
+        ExtractOptions {
+            overwrite: request.overwrite,
+            parents: request.parents,
+            cancellation_token: Some(job.cancellation_token.clone()),
+        },
+        |event| on_event(map_progress_event(job_id, session_id, event)),
+    );
 
     match result {
-        Some(Ok(_summary)) => state.remove_finished_job(job_id),
-        Some(Err(AppError::Cancelled)) => {
+        Ok(_summary) => {}
+        Err(AppError::Cancelled) => {
             on_event(ExtractionEvent::Cancelled(ExtractCancelledEvent {
                 job_id: job_id.as_str().to_string(),
                 session_id: session_id.as_str().to_string(),
             }));
-            state.remove_finished_job(job_id);
         }
-        Some(Err(other)) => {
+        Err(other) => {
             let gui_err = GuiErrorDto::from(other);
             on_event(ExtractionEvent::Failed(ExtractFailedEvent {
                 job_id: job_id.as_str().to_string(),
@@ -97,12 +125,9 @@ pub fn run_extraction_job(
                 code: gui_err.code,
                 message: gui_err.message,
             }));
-            state.remove_finished_job(job_id);
         }
-        // The session was closed mid-extraction; close_session already
-        // cancelled and removed this job, so there is nothing left to do.
-        None => {}
     }
+    state.remove_finished_job(job_id);
 }
 
 fn map_progress_event(
@@ -156,35 +181,26 @@ fn emit_extraction_event(app: &AppHandle, event: &ExtractionEvent) {
 }
 
 /// Tauri command wrapper for [`extract_file_impl`]: validates the request
-/// and registers the job synchronously, then spawns a background thread
-/// running [`run_extraction_job`] against the exact `CancellationToken`
-/// `extract_file_impl` stored, forwarding each event to the frontend.
+/// and registers the job on the blocking thread pool, then spawns a
+/// background thread running [`run_extraction_job`] for that prepared job,
+/// forwarding each event to the frontend.
 #[tauri::command]
-pub fn extract_file(
+pub async fn extract_file(
     app: AppHandle,
-    state: tauri::State<GuiState>,
     request: ExtractFileRequestDto,
 ) -> Result<ExtractStartedDto, GuiErrorDto> {
-    let started = extract_file_impl(&state, &request)?;
+    let (job, request) = run_blocking(app.clone(), move |state| {
+        extract_file_impl(state, &request).map(|job| (job, request))
+    })
+    .await?;
+    let started = job.started.clone();
 
-    let job_id = JobId::from(started.job_id.as_str());
-    let session_id = SessionId::from(started.session_id.as_str());
-
-    if let Some(token) = state.job_cancellation_token(&job_id) {
-        let app_for_thread = app.clone();
-        std::thread::spawn(move || {
-            let gui_state = app_for_thread.state::<GuiState>();
-            let app_for_emit = app_for_thread.clone();
-            run_extraction_job(
-                &gui_state,
-                &job_id,
-                &session_id,
-                &request,
-                token,
-                move |event| emit_extraction_event(&app_for_emit, &event),
-            );
+    std::thread::spawn(move || {
+        let gui_state = app.state::<GuiState>();
+        run_extraction_job(&gui_state, &job, &request, |event| {
+            emit_extraction_event(&app, &event);
         });
-    }
+    });
 
     Ok(started)
 }

@@ -12,3 +12,19 @@ pub mod container;
 pub mod dialogs;
 pub mod extraction;
 pub mod session;
+
+use crate::dto::error::{GuiErrorDto, INTERNAL_ERROR};
+use crate::state::GuiState;
+use tauri::{AppHandle, Manager};
+
+/// Runs a blocking command body against the managed [`GuiState`] on Tauri's
+/// blocking thread pool, so neither the main (UI) thread nor an async
+/// executor thread waits on key derivation or filesystem reads.
+async fn run_blocking<T: Send + 'static>(
+    app: AppHandle,
+    f: impl FnOnce(&GuiState) -> Result<T, GuiErrorDto> + Send + 'static,
+) -> Result<T, GuiErrorDto> {
+    tauri::async_runtime::spawn_blocking(move || f(&app.state::<GuiState>()))
+        .await
+        .map_err(|_| GuiErrorDto::new(INTERNAL_ERROR, "background task failed"))?
+}

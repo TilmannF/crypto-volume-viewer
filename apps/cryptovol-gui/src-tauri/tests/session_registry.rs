@@ -68,7 +68,9 @@ fn close_session_cancels_active_jobs_then_removes_the_session() {
     let session_id = state.insert_session(session);
 
     let token = cryptovol_app::CancellationToken::new();
-    let job_id = state.insert_job(session_id.clone(), token.clone());
+    let job_id = state
+        .insert_job(session_id.clone(), token.clone())
+        .expect("registering a job for an open session should succeed");
 
     state
         .close_session(&session_id)

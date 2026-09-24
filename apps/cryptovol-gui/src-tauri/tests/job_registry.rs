@@ -10,17 +10,38 @@
 //! already-removed job id returns a typed not-found error instead of
 //! panicking.
 
-use cryptovol_app::CancellationToken;
+mod support;
+
+use cryptovol_app::{open_volume, CancellationToken, OpenVolumeRequest};
 use cryptovol_gui_lib::dto::error::JOB_NOT_FOUND;
 use cryptovol_gui_lib::state::{GuiState, JobId, SessionId};
+use secrecy::SecretString;
+
+/// Registers a real synthetic session, since jobs can only be registered for
+/// an open session.
+fn insert_test_session(state: &GuiState, dir: &tempfile::TempDir) -> SessionId {
+    let session = open_volume(OpenVolumeRequest {
+        container_path: support::write_synthetic_container(dir, "jobs.hc"),
+        password: SecretString::from(support::TEST_PASSWORD.to_string()),
+        pim: None,
+        kdf_hint: None,
+    })
+    .expect("open_volume should succeed with the correct password");
+    state.insert_session(session)
+}
 
 #[test]
 fn generated_job_ids_are_unique_even_for_the_same_session_and_source_path() {
+    let dir = tempfile::TempDir::new().expect("temp dir");
     let state = GuiState::default();
-    let session_id = SessionId::new();
+    let session_id = insert_test_session(&state, &dir);
 
-    let job_a = state.insert_job(session_id.clone(), CancellationToken::new());
-    let job_b = state.insert_job(session_id, CancellationToken::new());
+    let job_a = state
+        .insert_job(session_id.clone(), CancellationToken::new())
+        .expect("register job a");
+    let job_b = state
+        .insert_job(session_id, CancellationToken::new())
+        .expect("register job b");
 
     assert_ne!(job_a.as_str(), job_b.as_str());
     assert!(!job_a.as_str().is_empty());
@@ -28,10 +49,13 @@ fn generated_job_ids_are_unique_even_for_the_same_session_and_source_path() {
 
 #[test]
 fn cancelling_a_known_job_flips_its_token_and_removes_it() {
+    let dir = tempfile::TempDir::new().expect("temp dir");
     let state = GuiState::default();
-    let session_id = SessionId::new();
+    let session_id = insert_test_session(&state, &dir);
     let token = CancellationToken::new();
-    let job_id = state.insert_job(session_id, token.clone());
+    let job_id = state
+        .insert_job(session_id, token.clone())
+        .expect("register job");
 
     state
         .cancel_job(&job_id)

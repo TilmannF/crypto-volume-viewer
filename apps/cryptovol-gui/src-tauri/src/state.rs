@@ -7,14 +7,27 @@
 //! handles themselves. (A dedicated regression test enforces that this
 //! source file never spells out that secret's usual name.)
 //!
-//! Locking is coarse-grained (one mutex for all sessions, one for all jobs):
-//! acceptable for this GUI MVP, which only drives a single session at a
-//! time, but a future multi-session UI may want per-session locking instead.
+//! Locking: one mutex guards the session map, another the job map. Sessions
+//! are stored as `Arc<VolumeSession>`, so callers clone the `Arc` under the
+//! lock and release it before doing any work; no closure, filesystem read,
+//! decryption, or event emission ever runs while either lock is held.
+//!
+//! Lock order is always sessions -> jobs. `insert_job` holds the sessions
+//! lock while inserting the job, and `close_session` holds it while removing
+//! the session and cancelling that session's jobs, so a job can never be
+//! registered for a session that is being or has been closed. No path takes
+//! the jobs lock and then the sessions lock.
+//!
+//! Key-material lifetime: `close_session` removes the session from the map,
+//! but an extraction thread still running against it keeps its own `Arc`.
+//! The session's key material therefore lives until that thread observes
+//! the cancelled token at its next chunked write (every 32 KiB, see
+//! `cryptovol_app`'s extraction writer), returns, and drops the `Arc`.
 
 use crate::dto::error::{GuiErrorDto, JOB_NOT_FOUND, SESSION_NOT_FOUND};
 use cryptovol_app::{CancellationToken, VolumeSession};
 use std::collections::HashMap;
-use std::sync::{Mutex, PoisonError};
+use std::sync::{Arc, Mutex, PoisonError};
 use uuid::Uuid;
 
 /// Opaque session id. Never derived from the container path, the volume's
@@ -93,7 +106,7 @@ struct ExtractionJob {
 /// extraction jobs.
 #[derive(Default)]
 pub struct GuiState {
-    sessions: Mutex<HashMap<SessionId, VolumeSession>>,
+    sessions: Mutex<HashMap<SessionId, Arc<VolumeSession>>>,
     extraction_jobs: Mutex<HashMap<JobId, ExtractionJob>>,
 }
 
@@ -102,32 +115,40 @@ impl GuiState {
     #[must_use]
     pub fn insert_session(&self, session: VolumeSession) -> SessionId {
         let id = SessionId::new();
-        lock(&self.sessions).insert(id.clone(), session);
+        lock(&self.sessions).insert(id.clone(), Arc::new(session));
         id
     }
 
+    /// Returns a shared handle to the session for `id`, or `None` if `id` is
+    /// unknown. The registry lock is released before this returns.
+    #[must_use]
+    pub fn session(&self, id: &SessionId) -> Option<Arc<VolumeSession>> {
+        lock(&self.sessions).get(id).cloned()
+    }
+
     /// Runs `f` against the session for `id`, or returns `None` if `id` is
-    /// unknown.
+    /// unknown. `f` runs after the registry lock has been released.
     pub fn with_session<T>(
         &self,
         id: &SessionId,
         f: impl FnOnce(&VolumeSession) -> T,
     ) -> Option<T> {
-        lock(&self.sessions).get(id).map(f)
+        self.session(id).map(|session| f(&session))
     }
 
-    /// Closes the session for `id`: cancels and removes every extraction job
-    /// owned by that session, then removes the session itself. Always
-    /// succeeds for a known session id, even with active jobs.
+    /// Closes the session for `id`: removes the session and, while still
+    /// holding the session lock, cancels and removes every extraction job it
+    /// owns. Always succeeds for a known session id, even with active jobs.
     ///
     /// # Errors
     ///
     /// Returns a [`GuiErrorDto`] with code [`SESSION_NOT_FOUND`] if `id` is
     /// unknown.
     pub fn close_session(&self, id: &SessionId) -> Result<(), GuiErrorDto> {
-        {
-            let mut jobs = lock(&self.extraction_jobs);
-            jobs.retain(|_job_id, job| {
+        let removed = {
+            let mut sessions = lock(&self.sessions);
+            let removed = sessions.remove(id).ok_or_else(session_not_found)?;
+            lock(&self.extraction_jobs).retain(|_job_id, job| {
                 if &job.session_id == id {
                     job.cancellation_token.cancel();
                     false
@@ -135,27 +156,31 @@ impl GuiState {
                     true
                 }
             });
-        }
-
-        let mut sessions = lock(&self.sessions);
-        if sessions.remove(id).is_some() {
-            Ok(())
-        } else {
-            Err(GuiErrorDto::new(
-                SESSION_NOT_FOUND,
-                "no open session with that id",
-            ))
-        }
+            removed
+        };
+        // Dropped only after both locks are released.
+        drop(removed);
+        Ok(())
     }
 
     /// Registers a new extraction job owned by `session_id` and returns its
-    /// new opaque id.
-    #[must_use]
+    /// new opaque id. Registration is atomic with respect to
+    /// [`GuiState::close_session`]: the job is only registered while the
+    /// session is still open.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`GuiErrorDto`] with code [`SESSION_NOT_FOUND`] if
+    /// `session_id` is unknown or has already been closed.
     pub fn insert_job(
         &self,
         session_id: SessionId,
         cancellation_token: CancellationToken,
-    ) -> JobId {
+    ) -> Result<JobId, GuiErrorDto> {
+        let sessions = lock(&self.sessions);
+        if !sessions.contains_key(&session_id) {
+            return Err(session_not_found());
+        }
         let id = JobId::new();
         lock(&self.extraction_jobs).insert(
             id.clone(),
@@ -164,7 +189,7 @@ impl GuiState {
                 cancellation_token,
             },
         );
-        id
+        Ok(id)
     }
 
     /// Cancels and removes the extraction job for `id`.
@@ -197,18 +222,10 @@ impl GuiState {
     pub fn active_job_count(&self) -> usize {
         lock(&self.extraction_jobs).len()
     }
+}
 
-    /// Returns a clone of the `CancellationToken` stored for `id`, if it is
-    /// still an active job. Used to hand the exact token `insert_job` stored
-    /// to the background thread that actually performs the copy, so a later
-    /// `cancel_job` call (which cancels the stored token) really does stop
-    /// that copy rather than an unrelated token instance.
-    #[must_use]
-    pub fn job_cancellation_token(&self, id: &JobId) -> Option<CancellationToken> {
-        lock(&self.extraction_jobs)
-            .get(id)
-            .map(|job| job.cancellation_token.clone())
-    }
+fn session_not_found() -> GuiErrorDto {
+    GuiErrorDto::new(SESSION_NOT_FOUND, "no open session with that id")
 }
 
 /// Locks `mutex`, recovering the inner guard if a prior panic poisoned it.

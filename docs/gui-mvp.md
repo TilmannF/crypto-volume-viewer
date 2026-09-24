@@ -45,7 +45,7 @@ Nine `#[tauri::command]` functions are registered in `apps/cryptovol-gui/src-tau
 | `open_container` | Opens a TC/VC volume with a password (+ optional PIM/KDF hint), returns a new session |
 | `list_dir` | Lists a directory's entries for an open session |
 | `stat` | Metadata for a single file/directory for an open session |
-| `close_session` | Cancels the session's active extraction jobs, then closes it |
+| `close_session` | Closes the session and cancels its active extraction jobs |
 | `extract_file` | Validates and starts a background single-file extraction job |
 | `cancel_extract` | Cancels an in-flight extraction job |
 | `select_container_file` | Native open-file picker for the container path |
@@ -63,16 +63,18 @@ Every command function is a thin wrapper around a plain, independently testable 
 
 `apps/cryptovol-gui/src-tauri/src/state.rs` defines `GuiState`, Tauri-managed application state holding two in-memory maps behind separate mutexes:
 
-* `sessions: HashMap<SessionId, cryptovol_app::VolumeSession>`
+* `sessions: HashMap<SessionId, Arc<cryptovol_app::VolumeSession>>`
 * `extraction_jobs: HashMap<JobId, ExtractionJob>` (each job holds its owning `SessionId` and a `cryptovol_app::CancellationToken`)
 
 `SessionId`/`JobId` are opaque, randomly generated UUIDs (`uuid::Uuid::new_v4()`) — never derived from the container path, password, PIM, KDF, or a timestamp — so they carry no information about what they open. `GuiState` never stores the password, derived keys, or raw decrypted data; a source-text guard test asserts `state.rs` never contains the substring for the secret it must not hold.
 
-**Cancel-then-close behavior:** `close_session` always succeeds for a known session id, even with active extraction jobs. It first cancels and removes every extraction job owned by that session (calling `CancellationToken::cancel()` on each), then removes the session itself. There is no "reject close while jobs are active" path.
+**Locking:** callers get a session by cloning its `Arc` under the sessions lock and releasing the lock before doing any work, so no filesystem read, decryption, progress callback, or event emission ever runs while a registry lock is held. Browsing (`list_dir`/`stat`) therefore never waits on a running extraction. When both locks are needed, the order is always sessions, then jobs. The regression test `apps/cryptovol-gui/src-tauri/tests/session_concurrency.rs` browses a session from another thread while work runs against it and fails if that blocks for 5 s.
+
+**Close-cancels behavior:** `close_session` always succeeds for a known session id, even with active extraction jobs. Holding the sessions lock, it removes the session and cancels and removes every extraction job owned by that session (calling `CancellationToken::cancel()` on each). `insert_job` checks that the session exists under the same sessions lock, so a job can never be registered for a session that is being closed; such a request gets `session_not_found`. There is no "reject close while jobs are active" path. A running extraction thread keeps its own `Arc` to the session, so the session's key material stays in memory after `close_session` until that thread sees the cancelled token at its next chunked write (every 32 KiB), emits `extract://cancelled`, and drops the `Arc`.
 
 ## Extraction Job Lifecycle And Progress Events
 
-`extract_file` validates the request synchronously (session lookup, then `VolumeSession::stat` to reject directory extraction *before* any job is created — `directory_extraction_unsupported`, not a job that immediately fails), registers the job, and returns `ExtractStartedDto` immediately. The actual copy runs on a spawned `std::thread`, calling `VolumeSession::extract_file` and translating each `cryptovol_app::ProgressEvent` into a GUI-facing event emitted to the frontend via `AppHandle::emit`.
+`open_container`, `list_dir`, `stat`, and `extract_file` are `async` commands whose bodies run on Tauri's blocking thread pool (`tauri::async_runtime::spawn_blocking`), never on the main (UI) thread and never on an async executor thread; `open_container`'s KDF autoprobe can take several seconds on a wrong password. `extract_file` validates the request (session lookup, then `VolumeSession::stat` to reject directory extraction *before* any job is created — `directory_extraction_unsupported`, not a job that immediately fails), registers the job, and returns `ExtractStartedDto` immediately. The actual copy runs on a spawned `std::thread`, which receives the session's `Arc` and the job's registered `CancellationToken` directly, calls `VolumeSession::extract_file`, and translates each `cryptovol_app::ProgressEvent` into a GUI-facing event emitted to the frontend via `AppHandle::emit`.
 
 Five events are emitted, defined in `apps/cryptovol-gui/src-tauri/src/events.rs`:
 
@@ -84,7 +86,7 @@ Five events are emitted, defined in `apps/cryptovol-gui/src-tauri/src/events.rs`
 | `extract://cancelled` | Once, if the job's `CancellationToken` was cancelled |
 | `extract://failed` | Once, for any other terminal error, carrying the mapped `GuiErrorDto` code/message |
 
-Every payload carries only job/session ids, paths, and byte counts — never passwords, keys, decrypted header bytes, or decrypted file contents. The job is removed from `GuiState`'s registry once it reaches any terminal state. `cancel_extract` cancels and removes the job's `CancellationToken`; cancelling an unknown or already-finished job id returns `job_not_found` rather than panicking. Cancellation relies on `cryptovol-app`'s existing streaming-writer guarantee that a cancelled or failed extraction never leaves a partially written file at the destination (see [streaming-extraction.md](streaming-extraction.md)) — the GUI layer does not duplicate that logic.
+Every started job emits exactly one terminal event (`finished`, `cancelled`, or `failed`), including when its session is closed mid-copy. Every payload carries only job/session ids, paths, and byte counts — never passwords, keys, decrypted header bytes, or decrypted file contents. The job is removed from `GuiState`'s registry once it reaches any terminal state. `cancel_extract` cancels and removes the job's `CancellationToken`; cancelling an unknown or already-finished job id returns `job_not_found` rather than panicking. Cancellation relies on `cryptovol-app`'s existing streaming-writer guarantee that a cancelled or failed extraction never leaves a partially written file at the destination (see [streaming-extraction.md](streaming-extraction.md)) — the GUI layer does not duplicate that logic.
 
 ## Dialog Permissions
 
@@ -174,5 +176,5 @@ Rust-side commands run from the repository root as usual: `cargo build -p crypto
 * No packaging or code signing.
 * No keyfile support.
 * No hidden-volume support.
-* Single-session UI: `GuiState`'s locking is coarse-grained (one mutex for all sessions, one for all jobs), which is fine for the one-session-at-a-time MVP but would want per-session locking for a future multi-window/multi-session UI.
+* Single-session UI: the frontend drives one open session at a time. `GuiState` itself holds any number of sessions and never runs work under its registry locks.
 * No keyboard navigation in the directory table (arrow keys/Enter/Backspace) — considered and explicitly deferred during the gui-density-redesign feature (2026-07-03).
