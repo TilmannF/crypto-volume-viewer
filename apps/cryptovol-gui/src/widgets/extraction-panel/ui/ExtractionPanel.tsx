@@ -38,7 +38,7 @@ export function ExtractionPanel({
 
   return (
     <Stack spacing={1} data-testid="extraction-panel">
-      <Stack direction="row" spacing={1} alignItems="center">
+      <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
         <TextField
           label="Destination path"
           size="small"

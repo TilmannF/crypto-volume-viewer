@@ -17,7 +17,7 @@ path = "src/lib.rs"
 workspace = true
 
 [dependencies]
-clap = { version = "4.5.61", features = ["derive"] }
+clap = { version = "4.6.6", features = ["derive"] }
 cryptovol-app = { path = "../cryptovol-app" }
 cryptovol-core = { path = "../cryptovol-core" }
 cryptovol-fs-exfat = { path = "../cryptovol-fs-exfat" }
@@ -29,4 +29,4 @@ secrecy = { workspace = true }
 zeroize = { workspace = true }
 
 [dev-dependencies]
-libc = "0.2"
+libc = "0.2.189"

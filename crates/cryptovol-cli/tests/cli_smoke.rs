@@ -442,23 +442,10 @@ fn probe_fs_reports_auth_safe_failure_for_random_input() {
     fs::write(&path, vec![0x5a; 1024]).expect("test file should be writable");
     let path_arg = path.to_string_lossy().into_owned();
 
-    let mut child = new_command(&["probe-fs", &path_arg])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("cryptovol probe-fs should start");
-
-    {
-        use std::io::Write;
-
-        let stdin = child.stdin.as_mut().expect("stdin should be piped");
-        stdin
-            .write_all(b"wrong-test-password\n")
-            .expect("password input should be writable");
-    }
-
-    let output = wait_child(child);
+    // rpassword reads /dev/tty, never stdin, and `new_command` runs the child
+    // under setsid, so the prompt fails without reading input. Writing a
+    // password to a piped stdin raced the child's exit (EPIPE on CI).
+    let output = cryptovol(&["probe-fs", &path_arg]);
 
     assert!(
         !stdout(&output).contains("not implemented"),
