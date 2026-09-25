@@ -1,8 +1,9 @@
 //! TC/VC-compatible encrypted container support for the narrow MVP profile.
 //!
 //! The current implementation supports only file-hosted normal containers that
-//! use AES-XTS, SHA-512 header KDF parameters, 512-byte sectors, and no hidden
-//! volume data. It exposes header-candidate inspection, password-based opening,
+//! use AES-XTS, a PBKDF2-HMAC header KDF (SHA-512, SHA-256, Whirlpool,
+//! BLAKE2s-256, or Streebog) with default or custom PIM, 512-byte sectors, and
+//! no hidden volume data. It exposes header-candidate inspection, password-based opening,
 //! decrypted read-only data access, and conservative first-sector filesystem
 //! probing.
 

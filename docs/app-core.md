@@ -45,7 +45,7 @@ An opened, owned TC/VC volume. Holds the container's `FileBlockReader` and the m
 
 ### `VolumeInfo`
 
-Safe, non-secret metadata returned by `volume_info()`: `container_path`, `container_size_bytes`, `backend` (currently always `"tcvc"`), `cipher` (currently always `"AES-XTS"`), `kdf`, `pim`, `header_role`, `filesystem` (a `FilesystemKind`, or `Unknown` if the decrypted data area could not be probed), `read_only` (always `true` in this MVP), and `decrypted_data_offset`/`decrypted_data_len: Option<u64>` (the decrypted data region's byte offset/length within the container; `Some` for TC/VC volumes today, with `None` reserved for a future backend that might not expose this concept). Only the numeric offset/length are exposed — never decrypted header bytes, keys, or decrypted content. `cryptovol-cli`'s `probe-fs` command still calls `cryptovol-tcvc` directly rather than `VolumeInfo` for historical reasons (see [architecture.md](architecture.md)); it could be migrated onto `VolumeInfo` now that these fields exist, but that migration is out of scope for this milestone.
+Safe, non-secret metadata returned by `volume_info()`: `container_path`, `container_size_bytes`, `backend` (currently always `"tcvc"`), `cipher` (currently always `"AES-XTS"`), `kdf`, `pim`, `header_role`, `filesystem` (a `FilesystemKind`, or `Unknown` if the decrypted data area could not be probed), `read_only` (always `true` in this MVP), and `decrypted_data_offset`/`decrypted_data_len: Option<u64>` (the decrypted data region's byte offset/length within the container; `Some` for TC/VC volumes today, with `None` reserved for a future backend that might not expose this concept). Only the numeric offset/length are exposed — never decrypted header bytes, keys, or decrypted content. `cryptovol-cli`'s `probe-fs` command opens the volume through `cryptovol-tcvc` directly and does not use `VolumeInfo`.
 
 ### `FileEntry`
 
@@ -71,14 +71,14 @@ The single error type returned by every `cryptovol-app` operation. Variants: `Io
 
 `cryptovol-cli` owns argument parsing (`clap`), password prompting (`rpassword`, wrapped into a `secrecy::SecretString` immediately), user-facing `println!`/`eprintln!` rendering, and exit-code mapping. For `info`, `test-open`, `ls`, and `extract`, it calls `cryptovol_app::inspect_container`/`open_volume`/`VolumeSession` methods and renders the returned data or maps `AppError` variants to the documented exit codes; see `crates/cryptovol-cli/src/commands.rs`. `extract` passes a no-op progress closure (`|_event| {}`) and `cancellation_token: None`, since the CLI does not yet expose a `--progress` flag or a way to cancel a running extraction — see [streaming-extraction.md](streaming-extraction.md).
 
-`probe-fs` is the one exception: it still calls `cryptovol-tcvc` directly, because its output needs the decrypted-data offset/length that `VolumeInfo` does not expose (see above).
+`probe-fs` is the one exception: it opens the volume through `cryptovol-tcvc` directly.
 
 ## How `cryptovol-gui` Uses It
 
 `apps/cryptovol-gui/src-tauri` depends on `cryptovol-app` the same way `cryptovol-cli` does, and nothing lower — see [gui-mvp.md](gui-mvp.md) for the full command/DTO/event model. In summary:
 
 * The password arrives via `OpenContainerRequestDto` (a `serde::Deserialize`-only DTO, never `Debug`/`Clone`) and is wrapped into a `secrecy::SecretString` before calling `open_volume`, matching the CLI's pattern.
-* `open_volume` and `extract_file` are called synchronously from a `#[tauri::command]` handler (the former on the command-invocation thread; the latter's actual copy runs on a spawned `std::thread` so the command returns immediately), and the returned `VolumeSession` is held in `GuiState`'s session registry, keyed by an opaque UUID `SessionId`.
+* The `open_container`, `list_dir`, `stat`, and `extract_file` commands are `async` and run their bodies on Tauri's blocking thread pool (`tauri::async_runtime::spawn_blocking`), never on the main thread. `open_volume` is called there, and the returned `VolumeSession` is held as an `Arc<VolumeSession>` in `GuiState`'s session registry, keyed by an opaque UUID `SessionId`. `extract_file`'s copy runs on a spawned `std::thread` that holds its own `Arc` to the session, so the command returns immediately and no registry lock is held during the copy.
 * `list_dir`/`stat` results are mapped to `FileEntryDto` and rendered by the React `DirectoryBrowser` widget.
 * `extract_file`'s progress closure translates each `ProgressEvent` into a typed `extract://*` Tauri event forwarded to the frontend; a `CancellationToken` is stored in `GuiState`'s job registry so a `cancel_extract` command can cancel the in-flight copy from another thread.
 * `AppError` is mapped to a stable-coded `GuiErrorDto` (`code` + short message) via `From<AppError> for GuiErrorDto` in `apps/cryptovol-gui/src-tauri/src/error.rs`, rather than relying on `AppError`'s `Display` text as final UI copy.

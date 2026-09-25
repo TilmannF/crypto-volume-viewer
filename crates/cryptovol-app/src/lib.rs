@@ -2,8 +2,8 @@
 //!
 //! This crate owns volume opening, filesystem probing/dispatch, directory
 //! listing, stat, and progress/cancellation-aware streaming extraction behind
-//! a stable API shared by `cryptovol-cli` today and a future GUI later. It
-//! never prompts for passwords and never prints to stdout/stderr.
+//! a stable API shared by `cryptovol-cli` and the `cryptovol-gui` desktop app.
+//! It never prompts for passwords and never prints to stdout/stderr.
 
 mod cancellation;
 mod container;

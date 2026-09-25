@@ -63,9 +63,9 @@ Located under `apps/cryptovol-gui/e2e/`. Uses WebdriverIO + `@wdio/tauri-service
 * `specs/gui-smoke.e2e.ts`: app starts (Open Volume page visible), wrong password (sanitized error, password never rendered), and a documented rationale for why extraction cancellation isn't covered here (see below).
 * `specs/fixtures.e2e.ts`: for each of FAT, exFAT, and NTFS — open/browse/select/extract regression (`{fat,exfat,ntfs}FixtureSelectionExtractionRegression`, sharing an `extractRocketFileAndVerify()` helper since all three static fixtures document the same file tree and ground truth — extracting a real file and comparing bytes against its ground-truth original) plus root-listing assertions; FAT additionally covers directory-extraction-unsupported.
 
-## Why E2E Is Local-Only, And Why No CI
+## Why E2E Is Local-Only
 
-This milestone intentionally does not add any CI configuration (GitHub Actions, GitLab CI, Forgejo, Woodpecker, Buildkite, CircleCI, or any other hosting-specific automation) — repository hosting has not been decided yet, and adding CI config for an undecided host would need to be redone or removed later. The E2E harness is designed to be fully reproducible on a developer's own machine (it builds the app itself via `onPrepare`; it does not depend on a human having run `npm run tauri dev` or `npm run build` beforehand) so that whichever hosting platform is chosen later can wire the same `npm run test:e2e` command into CI without any changes to this harness.
+The `ci` workflow (`.github/workflows/ci.yml`) runs the Rust layer on Linux, macOS, and Windows and the frontend-integration layer (`npm run typecheck`, `npm test`) on Linux. It does not run the Tauri E2E layer: [policies/50-github-and-ci-policy.md](../policies/50-github-and-ci-policy.md) section 7 keeps E2E out of that workflow, so `npm run test:e2e` is a local check (see [release-checklist.md](release-checklist.md)). The E2E harness is fully reproducible on a developer's own machine: it builds the app itself via `onPrepare` and does not depend on a human having run `npm run tauri dev` or `npm run build` beforehand.
 
 ## Installing And Running
 
