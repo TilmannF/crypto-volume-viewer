@@ -1,6 +1,7 @@
 //! Commands for opening a container and browsing/closing the resulting
 //! session.
 
+use crate::commands::run_blocking;
 use crate::dto::error::GuiErrorDto;
 use crate::dto::file_entry::FileEntryDto;
 use crate::dto::session::{
@@ -10,6 +11,7 @@ use crate::state::{GuiState, SessionId};
 use cryptovol_app::{open_volume, OpenVolumeRequest};
 use secrecy::SecretString;
 use std::path::PathBuf;
+use tauri::AppHandle;
 
 /// Opens a container with the given password/PIM/KDF hint and stores the
 /// resulting session under a fresh opaque id.
@@ -42,13 +44,14 @@ pub fn open_container_impl(
     })
 }
 
-/// Tauri command wrapper for [`open_container_impl`].
+/// Tauri command wrapper for [`open_container_impl`]. Runs on the blocking
+/// thread pool: key derivation can take seconds.
 #[tauri::command]
-pub fn open_container(
-    state: tauri::State<GuiState>,
+pub async fn open_container(
+    app: AppHandle,
     request: OpenContainerRequestDto,
 ) -> Result<OpenContainerResponseDto, GuiErrorDto> {
-    open_container_impl(&state, request)
+    run_blocking(app, move |state| open_container_impl(state, request)).await
 }
 
 /// Lists the entries of the directory at `path` within the session for
@@ -73,14 +76,15 @@ pub fn list_dir_impl(
         .map_err(GuiErrorDto::from)
 }
 
-/// Tauri command wrapper for [`list_dir_impl`].
+/// Tauri command wrapper for [`list_dir_impl`]. Runs on the blocking
+/// thread pool.
 #[tauri::command]
-pub fn list_dir(
-    state: tauri::State<GuiState>,
+pub async fn list_dir(
+    app: AppHandle,
     session_id: String,
     path: String,
 ) -> Result<Vec<FileEntryDto>, GuiErrorDto> {
-    list_dir_impl(&state, &session_id, &path)
+    run_blocking(app, move |state| list_dir_impl(state, &session_id, &path)).await
 }
 
 /// Returns metadata for a single file or directory at `path` within the
@@ -103,14 +107,15 @@ pub fn stat_impl(
     entry.map(FileEntryDto::from).map_err(GuiErrorDto::from)
 }
 
-/// Tauri command wrapper for [`stat_impl`].
+/// Tauri command wrapper for [`stat_impl`]. Runs on the blocking thread
+/// pool.
 #[tauri::command]
-pub fn stat(
-    state: tauri::State<GuiState>,
+pub async fn stat(
+    app: AppHandle,
     session_id: String,
     path: String,
 ) -> Result<FileEntryDto, GuiErrorDto> {
-    stat_impl(&state, &session_id, &path)
+    run_blocking(app, move |state| stat_impl(state, &session_id, &path)).await
 }
 
 /// Closes the session for `session_id`, cancelling any active extraction
