@@ -1,6 +1,6 @@
 # Release Checklist
 
-A local checklist for cutting a release candidate. Signing and notarization run on the developer Mac. Publishing the notarized `.dmg` uses GitHub Releases (`scripts/publish-github-release.sh`). There is no CI job that builds or notarizes. See [gui-testing.md](gui-testing.md) for why the automated suites stay forge-agnostic.
+A local checklist for cutting a release candidate. Signing and notarization run on the developer Mac. Publishing the notarized `.dmg` uses GitHub Releases (`scripts/publish-github-release.sh`). There is no CI job that builds or notarizes. The `ci` workflow (`.github/workflows/ci.yml`) runs the Rust checks and the GUI frontend unit tests on every pull request; Tauri E2E, the VeraCrypt fixture scripts, and signing run only locally (see [policies/50-github-and-ci-policy.md](../policies/50-github-and-ci-policy.md)).
 
 Run every command below from the repository root unless noted otherwise.
 
@@ -172,6 +172,6 @@ See [packaging-macos.md](packaging-macos.md) for the full reference (artifact la
 - [ ] Confirm the previous release's git tag is still reachable. Rolling back a bad GitHub Release means marking it as latest-on-a-previous-tag, not deleting the git history.
 - [ ] Do not overwrite `dist/macos/<previous-version>/` when packaging a new version (the scripts already isolate per version).
 
-## On `scripts/check-beta-readiness.sh`
+## `scripts/check-local-release-candidate.sh`
 
-No such script was added. A thin wrapper around the commands above would either (a) just re-run them verbatim, duplicating this document and risking the two silently drifting apart, or (b) grow its own flags/logic to be genuinely useful, which is unwarranted complexity for a project with no CI to integrate it with yet. This checklist is the single source of truth for the local acceptance process; if a wrapper script becomes worth it once CI/hosting is chosen, add it then.
+Runs the Rust checks (section 2) and the GUI checks (section 3), including `npm run test:e2e`, keeps going after a failure, and prints a PASS/FAIL summary. It exits non-zero if any check failed. It does not cover the fixture-gated tests, VeraCrypt scripts, packaging, or manual smoke tests; this checklist remains the single source of truth for the release process.

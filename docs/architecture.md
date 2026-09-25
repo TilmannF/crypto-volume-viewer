@@ -4,12 +4,12 @@
 
 ## Current Crate Boundaries
 
-* `cryptovol-cli`: clap command parsing, password prompting, user-facing output, and exit-code mapping. Delegates container/volume/filesystem logic to `cryptovol-app` for `info`, `test-open`, `ls`, and `extract`. `probe-fs` still calls `cryptovol-tcvc` directly, since its output needs the raw decrypted-data offset/length that `cryptovol-app`'s `VolumeInfo` does not yet expose.
+* `cryptovol-cli`: clap command parsing, password prompting, user-facing output, and exit-code mapping. Delegates container/volume/filesystem logic to `cryptovol-app` for `info`, `test-open`, `ls`, and `extract`. `probe-fs` opens the volume through `cryptovol-tcvc` directly.
 * `cryptovol-gui` (`apps/cryptovol-gui/src-tauri`): Tauri 2 desktop GUI backend. Registers `#[tauri::command]` functions that adapt `cryptovol-app` to DTOs/events for a React + MUI frontend (`apps/cryptovol-gui/src`), and owns GUI-only state (open session and extraction job registries). See [gui-mvp.md](gui-mvp.md).
 * `cryptovol-app`: framework-neutral application core shared by the CLI and the GUI. Owns password-free container inspection (`inspect_container`), volume opening (`open_volume`/`VolumeSession`), directory listing/stat, and progress- and cancellation-aware single-file extraction (`VolumeSession::extract_file`), including the canonical streaming destination writer. It never prompts for passwords and never prints to stdout/stderr — see [security.md](security.md).
 * `cryptovol-core`: shared read-only block abstractions and common file-backed block reader errors.
 * `cryptovol-tcvc`: TC/VC-compatible backend for header-candidate inspection, multi-KDF autoprobing (SHA-512, SHA-256, Whirlpool, BLAKE2s-256, Streebog), custom PIM support, AES-XTS decryption, decrypted data reads, and first-sector filesystem probing.
-* `cryptovol-fs-fat`: read-only FAT parser for 8.3 directory listing and single-file reads.
+* `cryptovol-fs-fat`: read-only FAT parser for 8.3 and long filename (LFN) directory listing, metadata, and single-file reads.
 * `cryptovol-fs-exfat`: read-only exFAT parser for boot sector parsing, cluster mapping, directory listing, and single-file extraction.
 * `cryptovol-fs-ntfs`: read-only NTFS parser for boot sector parsing, MFT record access, directory listing, metadata, and single-file extraction.
 

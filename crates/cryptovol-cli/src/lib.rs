@@ -1,7 +1,7 @@
 //! Library support for the `cryptovol` command-line application.
 //!
-//! This crate contains command execution, user-facing output rendering, exit
-//! code mapping, and safe destination-file writing for extraction.
+//! This crate contains command-line argument types, command execution,
+//! user-facing output rendering, and exit code mapping.
 
 pub mod commands;
 

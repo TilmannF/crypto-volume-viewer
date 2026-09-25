@@ -31,7 +31,7 @@ Support is intentionally narrow and experimental. No broad TrueCrypt or VeraCryp
 
 ## Commands
 
-`info` reports file metadata and TC/VC header candidate locations without decrypting. `test-open` attempts all supported KDF profiles by autoprobe and reports the matched KDF/hash and PIM state on success. `probe-fs` opens the volume and reports a conservative first-sector filesystem candidate. `ls` and `ls --long` require the supported TC/VC profile and list files with long names and optional metadata. `extract` accepts long-name source paths. All commands that open a volume accept `--pim N` and `--kdf <name>` options.
+`info` reports file metadata and TC/VC header candidate locations without decrypting. `test-open` attempts all supported KDF profiles by autoprobe and reports the matched KDF/hash and PIM state on success. `probe-fs` opens the volume and reports the matched header (primary or backup), KDF/hash, and PIM state, the decrypted data offset and size, and a conservative first-sector filesystem candidate. `ls` and `ls --long` require the supported TC/VC profile and list files with long names and optional metadata. `extract` accepts long-name source paths. All commands that open a volume accept `--pim N` and `--kdf <name>` options.
 
 `info`, `test-open`, `ls`, and `extract` are implemented on top of the shared `cryptovol-app` crate (see [architecture.md](architecture.md)); the format support described in this document is unchanged by that internal refactor. The desktop GUI (`apps/cryptovol-gui`, see [gui-mvp.md](gui-mvp.md)) is built on the same `cryptovol-app` crate and therefore supports exactly the same containers/filesystems described in this document — no separate format support surface.
 
