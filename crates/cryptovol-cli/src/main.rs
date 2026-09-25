@@ -1,6 +1,7 @@
 //! Binary entrypoint for the `cryptovol` command-line tool.
 
 use clap::{Parser, Subcommand};
+use cryptovol_cli::KdfArg;
 use std::process::ExitCode;
 
 #[derive(Debug, Parser)]
@@ -23,8 +24,8 @@ enum Commands {
             help = "Personal Iterations Multiplier (PIM); omit for VeraCrypt default"
         )]
         pim: Option<u32>,
-        #[arg(long, help = "KDF/hash hint (sha512|sha256); omit to autoprobe")]
-        kdf: Option<String>,
+        #[arg(long, value_enum, help = "KDF/hash hint; omit to autoprobe")]
+        kdf: Option<KdfArg>,
     },
     ProbeFs {
         container: String,
@@ -33,8 +34,8 @@ enum Commands {
             help = "Personal Iterations Multiplier (PIM); omit for VeraCrypt default"
         )]
         pim: Option<u32>,
-        #[arg(long, help = "KDF/hash hint (sha512|sha256); omit to autoprobe")]
-        kdf: Option<String>,
+        #[arg(long, value_enum, help = "KDF/hash hint; omit to autoprobe")]
+        kdf: Option<KdfArg>,
     },
     Ls {
         container: String,
@@ -46,8 +47,8 @@ enum Commands {
             help = "Personal Iterations Multiplier (PIM); omit for VeraCrypt default"
         )]
         pim: Option<u32>,
-        #[arg(long, help = "KDF/hash hint (sha512|sha256); omit to autoprobe")]
-        kdf: Option<String>,
+        #[arg(long, value_enum, help = "KDF/hash hint; omit to autoprobe")]
+        kdf: Option<KdfArg>,
     },
     Extract {
         container: String,
@@ -62,8 +63,8 @@ enum Commands {
             help = "Personal Iterations Multiplier (PIM); omit for VeraCrypt default"
         )]
         pim: Option<u32>,
-        #[arg(long, help = "KDF/hash hint (sha512|sha256); omit to autoprobe")]
-        kdf: Option<String>,
+        #[arg(long, value_enum, help = "KDF/hash hint; omit to autoprobe")]
+        kdf: Option<KdfArg>,
     },
 }
 
@@ -76,19 +77,19 @@ fn main() -> ExitCode {
             container,
             pim,
             kdf,
-        }) => cryptovol_cli::commands::test_open(&container, pim, kdf.as_deref()),
+        }) => cryptovol_cli::commands::test_open(&container, pim, kdf.map(Into::into)),
         Some(Commands::ProbeFs {
             container,
             pim,
             kdf,
-        }) => cryptovol_cli::commands::probe_fs(&container, pim, kdf.as_deref()),
+        }) => cryptovol_cli::commands::probe_fs(&container, pim, kdf.map(Into::into)),
         Some(Commands::Ls {
             container,
             path,
             long,
             pim,
             kdf,
-        }) => cryptovol_cli::commands::ls(&container, &path, long, pim, kdf.as_deref()),
+        }) => cryptovol_cli::commands::ls(&container, &path, long, pim, kdf.map(Into::into)),
         Some(Commands::Extract {
             container,
             source_path,
@@ -104,7 +105,7 @@ fn main() -> ExitCode {
             overwrite,
             parents,
             pim,
-            kdf.as_deref(),
+            kdf.map(Into::into),
         ),
         None => {
             println!("{}", cryptovol_core::product_name());

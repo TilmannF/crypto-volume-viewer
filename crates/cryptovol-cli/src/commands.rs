@@ -1,14 +1,13 @@
 //! Command execution and exit-code mapping for the `cryptovol` binary.
 
-use crate::{render_probe_fs_success, ProbeFsOutput};
+use crate::{header_role_text, render_probe_fs_success, ProbeFsOutput};
 use cryptovol_app::{
     AppError, ContainerBackupHeaderCandidate, ContainerHeaderInspection, ExtractOptions, FileEntry,
     FilesystemKind, OpenVolumeRequest, VolumeSession,
 };
 use cryptovol_core::FileBlockReader;
 use cryptovol_tcvc::{
-    open_with_options, probe_filesystem, HeaderCandidateRole, TcvcKdf, TcvcOpenError,
-    TcvcOpenOptions,
+    open_with_options, probe_filesystem, TcvcKdf, TcvcOpenError, TcvcOpenOptions,
 };
 use secrecy::SecretString;
 use std::path::PathBuf;
@@ -51,23 +50,6 @@ impl CliExitCode {
     /// Converts this category to [`ExitCode`].
     pub fn into_exit_code(self) -> ExitCode {
         ExitCode::from(self.code())
-    }
-}
-
-fn parse_kdf_hint(kdf: Option<&str>) -> Result<Option<TcvcKdf>, ()> {
-    match kdf {
-        None => Ok(None),
-        Some("sha512") => Ok(Some(TcvcKdf::Sha512)),
-        Some("sha256") => Ok(Some(TcvcKdf::Sha256)),
-        Some("whirlpool") => Ok(Some(TcvcKdf::Whirlpool)),
-        Some("blake2s") => Ok(Some(TcvcKdf::Blake2s256)),
-        Some("streebog") => Ok(Some(TcvcKdf::Streebog)),
-        Some(other) => {
-            eprintln!(
-                "unsupported KDF: {other}; supported values: sha512, sha256, whirlpool, blake2s, streebog"
-            );
-            Err(())
-        }
     }
 }
 
@@ -138,12 +120,7 @@ fn open_volume_for_command(
 }
 
 /// Executes `cryptovol test-open`.
-pub fn test_open(container: &str, pim: Option<u32>, kdf: Option<&str>) -> ExitCode {
-    let kdf_hint = match parse_kdf_hint(kdf) {
-        Ok(hint) => hint,
-        Err(()) => return CliExitCode::InvalidArguments.into_exit_code(),
-    };
-
+pub fn test_open(container: &str, pim: Option<u32>, kdf_hint: Option<TcvcKdf>) -> ExitCode {
     if let Err(err) = FileBlockReader::open(container) {
         eprintln!("{err}");
         return CliExitCode::GenericError.into_exit_code();
@@ -152,7 +129,7 @@ pub fn test_open(container: &str, pim: Option<u32>, kdf: Option<&str>) -> ExitCo
     let password = match rpassword::prompt_password("Password: ") {
         Ok(password) => password,
         Err(_) => {
-            println!("Could not open volume: authentication failed or unsupported parameters.");
+            eprintln!("Could not open volume: authentication failed or unsupported parameters.");
             return CliExitCode::AuthenticationFailed.into_exit_code();
         }
     };
@@ -167,13 +144,9 @@ pub fn test_open(container: &str, pim: Option<u32>, kdf: Option<&str>) -> ExitCo
     match cryptovol_app::open_volume(request) {
         Ok(session) => {
             let info = session.volume_info();
-            let header = match info.header_role {
-                HeaderCandidateRole::Primary => "primary",
-                HeaderCandidateRole::Backup => "backup",
-            };
             println!("TC/VC volume opened successfully.");
             println!("Backend: tcvc");
-            println!("Header: {header}");
+            println!("Header: {}", header_role_text(info.header_role));
             println!("Encryption: AES-XTS");
             println!("KDF/Hash: {}", info.kdf.display_name());
             println!("PIM: {}", info.pim.display());
@@ -181,11 +154,11 @@ pub fn test_open(container: &str, pim: Option<u32>, kdf: Option<&str>) -> ExitCo
             CliExitCode::Success.into_exit_code()
         }
         Err(AppError::AuthFailed) => {
-            println!("Could not open volume: authentication failed or unsupported parameters.");
+            eprintln!("Could not open volume: authentication failed or unsupported parameters.");
             CliExitCode::AuthenticationFailed.into_exit_code()
         }
         Err(AppError::UnsupportedFormat(_)) => {
-            println!("Could not open volume: authentication failed or unsupported parameters.");
+            eprintln!("Could not open volume: authentication failed or unsupported parameters.");
             CliExitCode::UnsupportedFormat.into_exit_code()
         }
         Err(err) => {
@@ -197,16 +170,9 @@ pub fn test_open(container: &str, pim: Option<u32>, kdf: Option<&str>) -> ExitCo
 
 /// Executes `cryptovol probe-fs`.
 ///
-/// This command still opens the volume directly through `cryptovol-tcvc`
-/// rather than `cryptovol_app::open_volume`/`VolumeSession`, because its
-/// output needs the raw decrypted-data offset/length, which
-/// `cryptovol_app::VolumeInfo` does not expose and this task may not add.
-pub fn probe_fs(container: &str, pim: Option<u32>, kdf: Option<&str>) -> ExitCode {
-    let kdf_hint = match parse_kdf_hint(kdf) {
-        Ok(hint) => hint,
-        Err(()) => return CliExitCode::InvalidArguments.into_exit_code(),
-    };
-
+/// Opens the volume directly through `cryptovol-tcvc` and reports the matched
+/// header, KDF/PIM, decrypted data area, and first-sector filesystem candidate.
+pub fn probe_fs(container: &str, pim: Option<u32>, kdf_hint: Option<TcvcKdf>) -> ExitCode {
     let reader = match FileBlockReader::open(container) {
         Ok(reader) => reader,
         Err(err) => {
@@ -218,7 +184,7 @@ pub fn probe_fs(container: &str, pim: Option<u32>, kdf: Option<&str>) -> ExitCod
     let mut password = match rpassword::prompt_password("Password: ") {
         Ok(password) => password,
         Err(_) => {
-            println!(
+            eprintln!(
                 "Could not probe filesystem: authentication failed or unsupported parameters."
             );
             return CliExitCode::AuthenticationFailed.into_exit_code();
@@ -236,55 +202,15 @@ pub fn probe_fs(container: &str, pim: Option<u32>, kdf: Option<&str>) -> ExitCod
 
     let opened = match result {
         Ok(opened) => opened,
-        Err(TcvcOpenError::AuthenticationOrUnsupported) => {
-            println!(
-                "Could not probe filesystem: authentication failed or unsupported parameters."
-            );
-            return CliExitCode::AuthenticationFailed.into_exit_code();
-        }
-        Err(TcvcOpenError::UnsupportedProfile { .. }) => {
-            println!(
-                "Could not probe filesystem: authentication failed or unsupported parameters."
-            );
-            return CliExitCode::UnsupportedFormat.into_exit_code();
-        }
-        Err(TcvcOpenError::ReadFailed { error }) => {
-            eprintln!("Could not probe filesystem: {error}");
-            return CliExitCode::GenericError.into_exit_code();
-        }
-        Err(TcvcOpenError::InvalidPim { .. }) => {
-            eprintln!(
-                "Could not probe filesystem: authentication failed or unsupported parameters."
-            );
-            return CliExitCode::AuthenticationFailed.into_exit_code();
-        }
+        Err(err) => return report_probe_open_error(err),
     };
 
     let metadata = opened.metadata();
+    let matched = opened.matched_profile();
+    let (header_role, kdf, pim) = (matched.header_role, matched.kdf, matched.pim);
     let data_reader = match opened.data_reader(&reader) {
         Ok(data_reader) => data_reader,
-        Err(TcvcOpenError::AuthenticationOrUnsupported) => {
-            println!(
-                "Could not probe filesystem: authentication failed or unsupported parameters."
-            );
-            return CliExitCode::AuthenticationFailed.into_exit_code();
-        }
-        Err(TcvcOpenError::UnsupportedProfile { .. }) => {
-            println!(
-                "Could not probe filesystem: authentication failed or unsupported parameters."
-            );
-            return CliExitCode::UnsupportedFormat.into_exit_code();
-        }
-        Err(TcvcOpenError::ReadFailed { error }) => {
-            eprintln!("Could not probe filesystem: {error}");
-            return CliExitCode::GenericError.into_exit_code();
-        }
-        Err(TcvcOpenError::InvalidPim { .. }) => {
-            eprintln!(
-                "Could not probe filesystem: authentication failed or unsupported parameters."
-            );
-            return CliExitCode::AuthenticationFailed.into_exit_code();
-        }
+        Err(err) => return report_probe_open_error(err),
     };
 
     let candidate = match probe_filesystem(&data_reader) {
@@ -299,6 +225,9 @@ pub fn probe_fs(container: &str, pim: Option<u32>, kdf: Option<&str>) -> ExitCod
         "{}",
         render_probe_fs_success(ProbeFsOutput {
             backend: metadata.backend,
+            header_role,
+            kdf,
+            pim,
             data_offset: metadata.data_offset,
             data_size: metadata.data_length,
             candidate,
@@ -306,6 +235,30 @@ pub fn probe_fs(container: &str, pim: Option<u32>, kdf: Option<&str>) -> ExitCod
     );
 
     CliExitCode::Success.into_exit_code()
+}
+
+/// Prints the `probe-fs` failure message for a TC/VC open error to stderr and
+/// returns its exit code. Authentication and profile failures share one
+/// message so the output does not reveal which check failed.
+fn report_probe_open_error(err: TcvcOpenError) -> ExitCode {
+    const AUTH_SAFE_FAILURE: &str =
+        "Could not probe filesystem: authentication failed or unsupported parameters.";
+
+    let exit_code = match err {
+        TcvcOpenError::AuthenticationOrUnsupported | TcvcOpenError::InvalidPim { .. } => {
+            eprintln!("{AUTH_SAFE_FAILURE}");
+            CliExitCode::AuthenticationFailed
+        }
+        TcvcOpenError::UnsupportedProfile { .. } => {
+            eprintln!("{AUTH_SAFE_FAILURE}");
+            CliExitCode::UnsupportedFormat
+        }
+        TcvcOpenError::ReadFailed { error } => {
+            eprintln!("Could not probe filesystem: {error}");
+            CliExitCode::GenericError
+        }
+    };
+    exit_code.into_exit_code()
 }
 
 /// Renders one [`FileEntry`] in the stable human-readable `ls` format.
@@ -385,13 +338,8 @@ pub fn ls(
     path: &str,
     long: bool,
     pim: Option<u32>,
-    kdf: Option<&str>,
+    kdf_hint: Option<TcvcKdf>,
 ) -> ExitCode {
-    let kdf_hint = match parse_kdf_hint(kdf) {
-        Ok(hint) => hint,
-        Err(()) => return CliExitCode::InvalidArguments.into_exit_code(),
-    };
-
     let session = match open_volume_for_command(container, pim, kdf_hint) {
         Ok(session) => session,
         Err(exit_code) => return exit_code,
@@ -448,13 +396,8 @@ pub fn extract(
     overwrite: bool,
     parents: bool,
     pim: Option<u32>,
-    kdf: Option<&str>,
+    kdf_hint: Option<TcvcKdf>,
 ) -> ExitCode {
-    let kdf_hint = match parse_kdf_hint(kdf) {
-        Ok(hint) => hint,
-        Err(()) => return CliExitCode::InvalidArguments.into_exit_code(),
-    };
-
     let session = match open_volume_for_command(container, pim, kdf_hint) {
         Ok(session) => session,
         Err(exit_code) => return exit_code,
