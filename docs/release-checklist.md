@@ -83,6 +83,7 @@ Using `npm run tauri dev` (or a built binary) and the fixtures documented in [te
 - [ ] Open the exFAT fixture (`tcvc-aes-sha512-exfat-lfn-unicode.hc`).
 - [ ] Open the NTFS fixture (`tcvc-aes-sha512-ntfs-lfn-unicode.hc`).
 - [ ] Try the directory-extraction-unsupported flow (select a directory, confirm the status bar message, confirm extraction stays disabled).
+- [ ] Test keyboard navigation in the directory table without clicking into it first (the table takes focus after every directory load): ↓/↑ move the selection without wrapping, Enter on a directory opens it, Backspace goes up one level, Escape clears the selection. The unit tests call the key handler directly, so only this step checks focus and key delivery in the real app.
 - [ ] Test the `Browse...` file dialog for the container path.
 - [ ] Test the save dialog for the extraction destination.
 

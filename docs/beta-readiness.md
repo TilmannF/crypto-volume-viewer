@@ -52,7 +52,7 @@ Before each GitHub Release: `./scripts/package-macos-release.sh` must pass `code
 
 Status values used: `ready`, `beta-ready`, `prepared`, `needs decision`, `blocked`, `deferred`, `not supported`. `prepared` means implemented and working locally, but not yet verified in the one condition that matters most (here: signing/notarization verified end-to-end with real Apple Developer credentials). This project describes itself as experimental throughout.
 
-"Beta-ready" here means: functional, tested, and documented, but not audited, not packaged/signed, and not proven against real-world third-party containers beyond this project's own fixtures.
+"Beta-ready" here means: functional, tested, and documented, but not audited and not proven against real-world third-party containers beyond this project's own fixtures.
 
 ## License, packaging, and CI status
 

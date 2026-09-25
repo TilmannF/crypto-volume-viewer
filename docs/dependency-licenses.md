@@ -56,4 +56,4 @@ All of the above are permissive (MIT and/or Apache-2.0), consistent with this pr
 
 ## Before public distribution
 
-Re-run both inventory commands above and review any dependency added since this document was last updated -- new dependencies are not automatically covered by this snapshot. This is especially important for any dependency outside the permissive MIT/Apache-2.0 family, which none of the above are today, but which a future addition might be.
+Re-run both inventory commands above and review any dependency added since this document was last updated -- new dependencies are not automatically covered by this snapshot. This is especially important for any dependency outside the permissive MIT/Apache-2.0 family. Today those are only the MPL-2.0 crates listed under "Weak-copyleft transitive dependencies", all pulled in by Tauri; the key GUI dependencies in the table are all permissive. A new dependency with a copyleft license needs a review before release.

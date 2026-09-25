@@ -29,7 +29,7 @@ shared/    api client (commands.ts/dto.ts/errors.ts), config, generic UI
 
 Import direction is one-way: `app -> pages -> widgets -> features -> entities -> shared`. `shared/api/commands.ts` is the *only* file in the frontend that imports `invoke`/`listen` from `@tauri-apps/api`; every other layer reaches the backend only through typed functions re-exported from `commands.ts` via a feature's `index.ts`.
 
-Notable widgets: `directory-browser` (entry listing/navigation/selection; also owns the toolbar's Close button and scrolls its table internally so the page itself never scrolls), `extraction-panel` (destination field, Browse/Extract/Cancel, and progress/result display in a single dense row), and `status-bar` (a one-line strip showing volume facts on the left and, on the right, the selected entry's name and, for a file with a known path, that path — or a clear warning when a non-directory entry has no usable path; replaced the former `volume-info-panel` and `selected-entry-panel` widgets). `VolumeBrowserPage`'s `canStartExtraction` requires the selected entry to be a non-directory *with* a known `path`, not just a non-empty destination path — this closes the gap the FAT `stat` bug (below) originally exploited, where a path-less selection could otherwise leave the Extract button enabled and only fail after the click.
+Notable widgets: `directory-browser` (entry listing/navigation/selection, including keyboard navigation: the table takes focus after every directory load, ↓/↑ move the selection without wrapping, Enter opens a selected directory, Backspace goes up one level, and Escape clears the selection; also owns the toolbar's Close button and scrolls its table internally so the page itself never scrolls), `extraction-panel` (destination field, Browse/Extract/Cancel, and progress/result display in a single dense row), and `status-bar` (a one-line strip showing volume facts on the left and, on the right, the selected entry's name and, for a file with a known path, that path — or a clear warning when a non-directory entry has no usable path; replaced the former `volume-info-panel` and `selected-entry-panel` widgets). `VolumeBrowserPage`'s `canStartExtraction` requires the selected entry to be a non-directory *with* a known `path`, not just a non-empty destination path — this closes the gap the FAT `stat` bug (below) originally exploited, where a path-less selection could otherwise leave the Extract button enabled and only fail after the click.
 
 ### Dense UI
 
@@ -173,8 +173,7 @@ Rust-side commands run from the repository root as usual: `cargo build -p crypto
 * No directory extraction — only single files, matching the CLI's current scope.
 * No file preview.
 * No recent-files list.
-* No packaging or code signing.
+* macOS packages are built for the build machine's architecture only (Apple silicon `aarch64` for 0.1.0); there are no Intel, Windows, or Linux packages. See [packaging-macos.md](packaging-macos.md).
 * No keyfile support.
 * No hidden-volume support.
 * Single-session UI: the frontend drives one open session at a time. `GuiState` itself holds any number of sessions and never runs work under its registry locks.
-* No keyboard navigation in the directory table (arrow keys/Enter/Backspace) — considered and explicitly deferred during the gui-density-redesign feature (2026-07-03).
