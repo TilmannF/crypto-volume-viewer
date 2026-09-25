@@ -25,7 +25,7 @@ use cryptovol_cli::{
     render_exfat_entry, render_exfat_entry_long, render_probe_fs_success, ProbeFsOutput,
 };
 use cryptovol_fs_exfat::{ExfatAttributes, ExfatEntry, ExfatTimestamp};
-use cryptovol_tcvc::FilesystemProbeCandidate;
+use cryptovol_tcvc::{FilesystemProbeCandidate, HeaderCandidateRole, PimState, TcvcKdf};
 
 /// Password-prompting CLI children must fail fast without a TTY/console.
 /// Anything longer than this on CI is a hang (rpassword waiting on input).
@@ -421,15 +421,16 @@ fn test_open_reports_failure_instead_of_placeholder() {
         stderr(&output)
     );
     assert_eq!(output.status.code(), Some(4));
+    let message = "Could not open volume: authentication failed or unsupported parameters.";
     assert!(
-        stdout(&output)
-            .contains("Could not open volume: authentication failed or unsupported parameters.")
-            || stderr(&output).contains(
-                "Could not open volume: authentication failed or unsupported parameters."
-            ),
-        "expected stable failure message, stdout: {}, stderr: {}",
-        stdout(&output),
+        stderr(&output).contains(message),
+        "expected stable failure message on stderr, stderr: {}",
         stderr(&output)
+    );
+    assert!(
+        !stdout(&output).contains(message),
+        "failure message must not go to stdout, stdout: {}",
+        stdout(&output)
     );
 
     fs::remove_file(path).expect("test file should be removable");
@@ -458,41 +459,46 @@ fn probe_fs_reports_auth_safe_failure_for_random_input() {
         stderr(&output)
     );
     assert_eq!(output.status.code(), Some(4));
+    let message = "Could not probe filesystem: authentication failed or unsupported parameters.";
     assert!(
-        stdout(&output).contains(
-            "Could not probe filesystem: authentication failed or unsupported parameters."
-        ) || stderr(&output).contains(
-            "Could not probe filesystem: authentication failed or unsupported parameters."
-        ),
-        "expected stable auth-safe failure message, stdout: {}, stderr: {}",
-        stdout(&output),
+        stderr(&output).contains(message),
+        "expected stable auth-safe failure message on stderr, stderr: {}",
         stderr(&output)
+    );
+    assert!(
+        !stdout(&output).contains(message),
+        "failure message must not go to stdout, stdout: {}",
+        stdout(&output)
     );
 
     fs::remove_file(path).expect("test file should be removable");
 }
 
 #[test]
-#[ignore = "requires scripts/test-with-veracrypt-fixtures.sh to generate CRYPTOVOL_TEST_CONTAINER"]
 fn probe_fs_reports_safe_fixture_success_output() {
     let stdout = render_probe_fs_success(ProbeFsOutput {
         backend: "tcvc",
+        header_role: HeaderCandidateRole::Primary,
+        kdf: TcvcKdf::Sha512,
+        pim: PimState::Default,
         data_offset: 131_072,
         data_size: 20 * 1024 * 1024 - 131_072,
         candidate: FilesystemProbeCandidate::FatLike,
     });
 
-    assert!(stdout.contains("TC/VC volume opened successfully."));
-    assert!(stdout.contains("Backend: tcvc"));
-    assert!(stdout.contains("Encryption: AES-XTS"));
-    assert!(stdout.contains("KDF/Hash: SHA-512"));
-    assert!(stdout.contains("Read-only: yes"));
+    assert!(stdout.starts_with(
+        "TC/VC volume opened successfully.\n\
+Backend: tcvc\n\
+Header: primary\n\
+Encryption: AES-XTS\n\
+KDF/Hash: SHA-512\n\
+PIM: default\n\
+Read-only: yes\n"
+    ));
     assert!(stdout.contains("First sector: readable"));
     assert!(stdout.contains("Candidate: FAT-like"));
-    assert!(
-        stdout.contains("FAT listing/extraction: available for supported short-name FAT fixtures")
-    );
-    assert!(stdout.contains("Long filename support: available"));
+    assert!(!stdout.contains("FAT listing/extraction"));
+    assert!(!stdout.contains("Long filename support"));
     assert!(stdout.contains("Directory extraction: not supported"));
     for secret in [
         "test-password",
@@ -504,6 +510,68 @@ fn probe_fs_reports_safe_fixture_success_output() {
         assert!(
             !stdout.contains(secret),
             "probe-fs success output must not expose secret marker {secret:?}: {stdout}"
+        );
+    }
+}
+
+#[test]
+fn probe_fs_renders_matched_backup_header_kdf_and_pim() {
+    let stdout = render_probe_fs_success(ProbeFsOutput {
+        backend: "tcvc",
+        header_role: HeaderCandidateRole::Backup,
+        kdf: TcvcKdf::Sha256,
+        pim: PimState::Custom(500),
+        data_offset: 131_072,
+        data_size: 1_048_576,
+        candidate: FilesystemProbeCandidate::Ntfs,
+    });
+
+    assert!(stdout.contains("Header: backup\n"), "{stdout}");
+    assert!(
+        stdout.contains(&format!("KDF/Hash: {}\n", TcvcKdf::Sha256.display_name())),
+        "{stdout}"
+    );
+    assert!(stdout.contains("PIM: 500\n"), "{stdout}");
+    assert!(!stdout.contains("SHA-512"), "{stdout}");
+}
+
+#[test]
+fn kdf_invalid_value_exits_with_invalid_arguments() {
+    let output = cryptovol(&["test-open", "no-such-container.hc", "--kdf", "bogus"]);
+
+    assert_eq!(output.status.code(), Some(2), "stderr: {}", stderr(&output));
+    let stderr = stderr(&output);
+    assert!(stderr.contains("bogus"), "{stderr}");
+    for value in ["sha512", "sha256", "whirlpool", "blake2s", "streebog"] {
+        assert!(
+            stderr.contains(value),
+            "stderr must list {value:?}: {stderr}"
+        );
+    }
+    assert!(
+        stdout(&output).is_empty(),
+        "usage errors must not print to stdout: {}",
+        stdout(&output)
+    );
+}
+
+#[test]
+fn kdf_each_documented_value_is_accepted_by_the_binary() {
+    // The container does not exist, so a successfully parsed --kdf fails at
+    // file open (exit 1) before any password prompt.
+    for value in ["sha512", "sha256", "whirlpool", "blake2s", "streebog"] {
+        let output = cryptovol(&["test-open", "no-such-container.hc", "--kdf", value]);
+
+        assert_eq!(
+            output.status.code(),
+            Some(1),
+            "--kdf {value} must parse, stderr: {}",
+            stderr(&output)
+        );
+        assert!(
+            !stderr(&output).contains("invalid value"),
+            "--kdf {value} must not be a usage error: {}",
+            stderr(&output)
         );
     }
 }
@@ -656,6 +724,9 @@ fn test_open_pim_flag_accepted() {
 fn probe_fs_renders_exfat_candidate() {
     let output = render_probe_fs_success(ProbeFsOutput {
         backend: "tcvc",
+        header_role: HeaderCandidateRole::Primary,
+        kdf: TcvcKdf::Sha512,
+        pim: PimState::Default,
         data_offset: 131_072,
         data_size: 104_857_600,
         candidate: FilesystemProbeCandidate::ExFat,

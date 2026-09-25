@@ -8,13 +8,51 @@ pub mod commands;
 use cryptovol_fs_exfat::ExfatEntry;
 use cryptovol_fs_fat::DirectoryEntry;
 use cryptovol_fs_ntfs::{NtfsEntry, NtfsTimestamp};
-use cryptovol_tcvc::FilesystemProbeCandidate;
+use cryptovol_tcvc::{FilesystemProbeCandidate, HeaderCandidateRole, PimState, TcvcKdf};
+
+/// Accepted `--kdf` hint values.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum KdfArg {
+    /// SHA-512 PBKDF2-HMAC header KDF.
+    #[value(name = "sha512")]
+    Sha512,
+    /// SHA-256 PBKDF2-HMAC header KDF.
+    #[value(name = "sha256")]
+    Sha256,
+    /// Whirlpool PBKDF2-HMAC header KDF.
+    #[value(name = "whirlpool")]
+    Whirlpool,
+    /// BLAKE2s-256 PBKDF2-HMAC header KDF.
+    #[value(name = "blake2s")]
+    Blake2s,
+    /// Streebog-512 PBKDF2-HMAC header KDF.
+    #[value(name = "streebog")]
+    Streebog,
+}
+
+impl From<KdfArg> for TcvcKdf {
+    fn from(arg: KdfArg) -> Self {
+        match arg {
+            KdfArg::Sha512 => Self::Sha512,
+            KdfArg::Sha256 => Self::Sha256,
+            KdfArg::Whirlpool => Self::Whirlpool,
+            KdfArg::Blake2s => Self::Blake2s256,
+            KdfArg::Streebog => Self::Streebog,
+        }
+    }
+}
 
 /// Data rendered after a successful `probe-fs` command.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProbeFsOutput {
     /// Crypto backend name.
     pub backend: &'static str,
+    /// Header candidate that opened the volume.
+    pub header_role: HeaderCandidateRole,
+    /// KDF/hash that opened the header.
+    pub kdf: TcvcKdf,
+    /// Default or custom PIM that opened the header.
+    pub pim: PimState,
     /// Physical offset of the encrypted data area.
     pub data_offset: u64,
     /// Logical decrypted data size.
@@ -117,9 +155,10 @@ pub fn render_probe_fs_success(output: ProbeFsOutput) -> String {
     format!(
         "TC/VC volume opened successfully.\n\
 Backend: {backend}\n\
-Header: primary\n\
+Header: {header}\n\
 Encryption: AES-XTS\n\
-KDF/Hash: SHA-512\n\
+KDF/Hash: {kdf}\n\
+PIM: {pim}\n\
 Read-only: yes\n\
 \n\
 Decrypted data:\n\
@@ -129,14 +168,23 @@ Decrypted data:\n\
 \n\
 Filesystem probe:\n\
   Candidate: {candidate}\n\
-  FAT listing/extraction: available for supported short-name FAT fixtures\n\
-  Long filename support: available\n\
   Directory extraction: not supported\n",
         backend = output.backend,
+        header = header_role_text(output.header_role),
+        kdf = output.kdf.display_name(),
+        pim = output.pim.display(),
         data_offset = output.data_offset,
         data_size = output.data_size,
         candidate = filesystem_candidate_text(output.candidate),
     )
+}
+
+/// Renders a matched header candidate role for user-facing output.
+pub fn header_role_text(role: HeaderCandidateRole) -> &'static str {
+    match role {
+        HeaderCandidateRole::Primary => "primary",
+        HeaderCandidateRole::Backup => "backup",
+    }
 }
 
 /// Renders a filesystem probe candidate for user-facing output.
@@ -146,6 +194,44 @@ pub fn filesystem_candidate_text(candidate: FilesystemProbeCandidate) -> &'stati
         FilesystemProbeCandidate::ExFat => "exFAT",
         FilesystemProbeCandidate::Ntfs => "NTFS",
         FilesystemProbeCandidate::Unknown => "unknown",
+    }
+}
+
+#[cfg(test)]
+mod kdf_arg_tests {
+    use super::KdfArg;
+    use clap::ValueEnum;
+    use cryptovol_tcvc::TcvcKdf;
+
+    #[test]
+    fn kdf_arg_accepts_exactly_the_documented_values() {
+        let names: Vec<String> = KdfArg::value_variants()
+            .iter()
+            .filter_map(ValueEnum::to_possible_value)
+            .map(|v| v.get_name().to_owned())
+            .collect();
+        assert_eq!(
+            names,
+            ["sha512", "sha256", "whirlpool", "blake2s", "streebog"]
+        );
+
+        for (value, expected) in [
+            ("sha512", TcvcKdf::Sha512),
+            ("sha256", TcvcKdf::Sha256),
+            ("whirlpool", TcvcKdf::Whirlpool),
+            ("blake2s", TcvcKdf::Blake2s256),
+            ("streebog", TcvcKdf::Streebog),
+        ] {
+            let arg = KdfArg::from_str(value, false);
+            assert_eq!(arg.map(TcvcKdf::from), Ok(expected), "{value}");
+        }
+
+        for rejected in ["SHA512", "blake2s256", "sha-512", ""] {
+            assert!(
+                KdfArg::from_str(rejected, false).is_err(),
+                "{rejected:?} must be rejected"
+            );
+        }
     }
 }
 
