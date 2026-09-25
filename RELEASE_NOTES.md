@@ -12,7 +12,7 @@ Downloads: https://github.com/TilmannF/crypto-volume-viewer/releases/latest
 - AES-XTS volume decryption.
 - Read-only directory listing and metadata for FAT (including long filenames/Unicode), exFAT, and NTFS.
 - Single-file extraction, streamed in bounded chunks, with progress and cancellation.
-- Both a scriptable CLI (`cryptovol`) and a desktop GUI (Crypto Volume Viewer), sharing the same underlying `cryptovol-app` core.
+- A desktop GUI (Crypto Volume Viewer) and a scriptable CLI (`cryptovol`), sharing the same underlying `cryptovol-app` core. The download contains the GUI app only; build the CLI from source with `cargo build --release -p cryptovol-cli` (see the README).
 
 ## Known limitations
 
@@ -24,7 +24,7 @@ Downloads: https://github.com/TilmannF/crypto-volume-viewer/releases/latest
 - No directory extraction — single-file extraction only.
 - No write support of any kind to the encrypted container.
 - No mounting, no FUSE, no kernel extensions.
-- macOS-first: this release is a notarized macOS GUI/CLI. Windows/Linux packaging is not included.
+- macOS-first: the download is a notarized macOS GUI app for Apple silicon (`aarch64`) only. Intel Macs, Windows, and Linux are not packaged. The CLI builds and is tested in CI on macOS, Linux, and Windows, but is not distributed as a binary.
 - The GUI is early-release quality: functional and tested, but not independently audited.
 - No broad TrueCrypt/VeraCrypt compatibility is claimed; support is validated only against this project's own test fixtures, not arbitrary real-world containers.
 

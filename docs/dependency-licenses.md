@@ -50,6 +50,10 @@ Verified directly against each installed package's own metadata (`node_modules/*
 
 All of the above are permissive (MIT and/or Apache-2.0), consistent with this project's own dependency tree generally (see [license-decision.md](license-decision.md) for how that informs this project's own license options).
 
+## Weak-copyleft transitive dependencies
+
+`cargo metadata --all-features` lists five MPL-2.0 crates. All come in through Tauri, not through this project's own code: `cssparser`, `cssparser-macros`, `dtoa-short`, and `selectors` via `tauri-utils` → `dom_query`, and `option-ext` via `dirs` → `dirs-sys`. MPL-2.0 is file-level copyleft: using the unmodified crates in an Apache-2.0 application is permitted, and their source stays available on crates.io. `r-efi` is offered as `MIT OR Apache-2.0 OR LGPL-2.1-or-later`, so the permissive terms apply. The shipped frontend dependencies (`npx license-checker --production`) are all MIT, BSD-3-Clause, ISC, or MIT/Apache-2.0.
+
 ## Before public distribution
 
-Re-run both inventory commands above and review any dependency added since this document was last updated -- new dependencies are not automatically covered by this snapshot. This is especially important for any dependency outside the permissive MIT/Apache-2.0 family, which none of the above are today, but which a future addition might be.
+Re-run both inventory commands above and review any dependency added since this document was last updated -- new dependencies are not automatically covered by this snapshot. This is especially important for any dependency outside the permissive MIT/Apache-2.0 family. Today those are only the MPL-2.0 crates listed under "Weak-copyleft transitive dependencies", all pulled in by Tauri; the key GUI dependencies in the table are all permissive. A new dependency with a copyleft license needs a review before release.
