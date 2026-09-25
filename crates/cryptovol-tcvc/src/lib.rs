@@ -6,19 +6,10 @@
 //! decrypted read-only data access, and conservative first-sector filesystem
 //! probing.
 
-#![cfg_attr(
-    test,
-    allow(
-        clippy::expect_used,
-        clippy::panic,
-        reason = "unit tests use direct synthetic fixture assertions"
-    )
-)]
-
 use aes::cipher::KeyInit;
 use aes::Aes256;
 use blake2::Blake2s256;
-use cryptovol_core::{BlockReader, CryptoVolumeBackend, CryptovolError};
+use cryptovol_core::{BlockReader, CryptovolError};
 // Blake2s uses Lazy buffering, not EagerHash, so it can't use Hmac or pbkdf2_hmac.
 // Use the lower-level pbkdf2 function with SimpleHmac<Blake2s256> instead.
 use pbkdf2::{hmac::SimpleHmac, pbkdf2 as pbkdf2_raw, pbkdf2_hmac};
@@ -178,17 +169,6 @@ impl PimState {
             Self::Default => "default".to_owned(),
             Self::Custom(n) => n.to_string(),
         }
-    }
-}
-
-/// Backend handle for TC/VC-compatible container inspection.
-#[derive(Debug, Default, Clone, Copy)]
-pub struct TcvcBackend;
-
-impl TcvcBackend {
-    /// Creates a TC/VC backend handle.
-    pub fn new() -> Self {
-        Self
     }
 }
 
@@ -1022,57 +1002,5 @@ fn read_candidate(reader: &dyn BlockReader, offset: u64) -> CandidateReadStatus 
         Err(error) => CandidateReadStatus::ReadFailed {
             error: error.to_string(),
         },
-    }
-}
-
-impl CryptoVolumeBackend for TcvcBackend {
-    type Inspection = TcvcInspection;
-
-    fn name(&self) -> &'static str {
-        BACKEND_NAME
-    }
-
-    fn inspect(&self, reader: &dyn BlockReader) -> Result<Self::Inspection, CryptovolError> {
-        inspect_header_candidates(reader)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    struct EmptyReader;
-
-    impl BlockReader for EmptyReader {
-        fn len(&self) -> u64 {
-            0
-        }
-
-        fn read_at(&self, _offset: u64, _buf: &mut [u8]) -> Result<(), CryptovolError> {
-            Ok(())
-        }
-    }
-
-    #[test]
-    fn backend_exposes_tcvc_name() {
-        let backend = TcvcBackend::new();
-
-        assert_eq!(backend.name(), "tcvc");
-    }
-
-    #[test]
-    fn backend_returns_core_inspection_metadata() {
-        let backend = TcvcBackend::new();
-        let reader = EmptyReader;
-
-        let inspection = backend.inspect(&reader).expect("inspection should succeed");
-
-        assert_eq!(
-            inspection,
-            TcvcInspection::TooSmall {
-                file_size: 0,
-                required_minimum: TCVC_HEADER_CANDIDATE_LEN,
-            }
-        );
     }
 }
