@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Shared helpers for the macOS packaging scripts (package-macos-local.sh,
-# package-macos-release.sh, create-checksums.sh). Meant to be sourced, not
-# executed directly.
+# Shared helpers for the macOS packaging and release scripts
+# (package-macos-local.sh, package-macos-release.sh, create-checksums.sh,
+# publish-github-release.sh, verify-github-release.sh,
+# check-local-release-candidate.sh) and their tests
+# (test-packaging-common.sh). Meant to be sourced, not executed directly.
 set -euo pipefail
 
 # Prints the repository root's absolute path.
@@ -33,6 +35,102 @@ dist_dir() {
   dir="$(project_root)/dist/macos/$(package_version)"
   mkdir -p "$dir"
   printf '%s\n' "$dir"
+}
+
+# Prints the file name to use for a release artifact. GitHub rewrites release
+# asset names outside [A-Za-z0-9._-] on upload (a space becomes "."), and
+# SHA256SUMS.txt must list the name users actually download. Tauri names the
+# DMG after the product ("Crypto Volume Viewer_<version>_<arch>.dmg"), so
+# spaces are replaced with "." here, matching what GitHub would publish.
+release_asset_name() {
+  printf '%s\n' "${1// /.}"
+}
+
+# Fails unless $1 is a name GitHub keeps unchanged as a release asset name:
+# only [A-Za-z0-9._-], not starting or ending with ".".
+require_release_safe_name() {
+  local name="$1"
+  if [[ ! "$name" =~ ^[A-Za-z0-9_-]([A-Za-z0-9._-]*[A-Za-z0-9_-])?$ ]]; then
+    echo "ERROR: '$name' is not a GitHub-safe release asset name (allowed: A-Z a-z 0-9 . _ -, no leading/trailing '.')." >&2
+    echo "       GitHub would rename it on upload, and SHA256SUMS.txt would no longer match the published file." >&2
+    return 1
+  fi
+}
+
+# Prints the path of the single .dmg in directory $1. Fails if there is none
+# or more than one, so checksums and uploads never pick an arbitrary DMG.
+single_dmg_in() {
+  local dir="$1"
+  local dmgs=()
+  local f
+  for f in "$dir"/*.dmg; do
+    [[ -e "$f" ]] && dmgs+=("$f")
+  done
+  if [[ ${#dmgs[@]} -eq 0 ]]; then
+    echo "ERROR: no .dmg in $dir" >&2
+    return 1
+  fi
+  if [[ ${#dmgs[@]} -gt 1 ]]; then
+    echo "ERROR: more than one .dmg in $dir; remove the stale one(s):" >&2
+    printf '         %s\n' "${dmgs[@]##*/}" >&2
+    return 1
+  fi
+  printf '%s\n' "${dmgs[0]}"
+}
+
+# Prints the file names listed in $1/SHA256SUMS.txt, one per line, after
+# checking that every line is "<sha256>  <name>", every name is GitHub-safe,
+# and every listed file exists in $1. Then runs `shasum -a 256 -c` there.
+check_sums_file() {
+  local dir="$1"
+  local sums="$dir/SHA256SUMS.txt"
+  if [[ ! -f "$sums" ]]; then
+    echo "ERROR: no SHA256SUMS.txt in $dir" >&2
+    return 1
+  fi
+
+  local line name count=0
+  local pattern='^[0-9a-f]{64} [ *](.+)$'
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ -z "$line" ]] && continue
+    if [[ ! "$line" =~ $pattern ]]; then
+      echo "ERROR: malformed line in $sums: $line" >&2
+      return 1
+    fi
+    name="${BASH_REMATCH[1]}"
+    require_release_safe_name "$name" || return 1
+    if [[ ! -f "$dir/$name" ]]; then
+      echo "ERROR: SHA256SUMS.txt lists '$name', which is not in $dir" >&2
+      return 1
+    fi
+    printf '%s\n' "$name"
+    count=$((count + 1))
+  done < "$sums"
+  if [[ $count -eq 0 ]]; then
+    echo "ERROR: SHA256SUMS.txt in $dir lists no files" >&2
+    return 1
+  fi
+
+  (cd "$dir" && shasum -a 256 -c SHA256SUMS.txt >&2)
+}
+
+# Checks a directory of downloaded release assets exactly as users receive
+# them: check_sums_file passes and every downloaded file other than
+# SHA256SUMS.txt is listed in it.
+verify_release_dir() {
+  local dir="$1"
+  local listed
+  listed="$(check_sums_file "$dir")" || return 1
+
+  local f base
+  for f in "$dir"/*; do
+    base="${f##*/}"
+    [[ "$base" == "SHA256SUMS.txt" ]] && continue
+    if ! printf '%s\n' "$listed" | grep -Fxq -- "$base"; then
+      echo "ERROR: release asset '$base' is not listed in SHA256SUMS.txt" >&2
+      return 1
+    fi
+  done
 }
 
 # Writes "$(dist_dir)/build-info.txt". Usage:

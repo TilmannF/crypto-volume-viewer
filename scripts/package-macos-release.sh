@@ -164,11 +164,13 @@ run_release_build() {
   local out_dir app_name dmg_name
   out_dir="$(dist_dir)"
   app_name="$(basename "$app_src")"
-  dmg_name="$(basename "$dmg_src")"
+  dmg_name="$(release_asset_name "$(basename "$dmg_src")")"
+  require_release_safe_name "$dmg_name"
 
   rm -rf "${out_dir:?}/${app_name}"
+  rm -f "${out_dir:?}"/*.dmg "${out_dir:?}/SHA256SUMS.txt"
   cp -R "$app_src" "$out_dir/"
-  cp "$dmg_src" "$out_dir/"
+  cp "$dmg_src" "$out_dir/$dmg_name"
 
   local app_dst="$out_dir/$app_name"
   local dmg_dst="$out_dir/$dmg_name"

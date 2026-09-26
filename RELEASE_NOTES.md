@@ -40,7 +40,7 @@ Extracted files are no longer protected by the container encryption.
 
 ## macOS installation notes
 
-1. Download `Crypto Volume Viewer_0.1.0_aarch64.dmg` from the GitHub Release.
+1. Download `Crypto.Volume.Viewer_0.1.0_aarch64.dmg` and `SHA256SUMS.txt` from the GitHub Release.
 2. Verify the checksum (below).
 3. Open the `.dmg` and drag **Crypto Volume Viewer** into **Applications**.
 4. First launch should be accepted by Gatekeeper (Developer ID, notarized). If macOS still blocks it, the download was altered or the checksum was skipped.
