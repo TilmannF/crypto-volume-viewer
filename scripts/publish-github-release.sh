@@ -44,23 +44,25 @@ if [[ ! -f "$notes" ]]; then
   exit 1
 fi
 
-# Everything uploaded is exactly what SHA256SUMS.txt lists, under the same
-# names, so `shasum -a 256 -c SHA256SUMS.txt` works for every downloader.
+# The release is exactly the DMG plus SHA256SUMS.txt, and SHA256SUMS.txt
+# lists exactly that DMG under its published name, so
+# `shasum -a 256 -c SHA256SUMS.txt` works for every downloader and no other
+# file in dist/ (for example one left over from an older build) is published.
 echo "==> Checking SHA256SUMS.txt against $out (failure aborts publish)..."
 if ! listed="$(check_sums_file "$out")"; then
   echo "       Re-run ./scripts/package-macos-release.sh; it writes the DMG under a GitHub-safe" >&2
   echo "       name and regenerates SHA256SUMS.txt." >&2
   exit 1
 fi
-if ! printf '%s\n' "$listed" | grep -Fxq -- "${dmg##*/}"; then
-  echo "ERROR: SHA256SUMS.txt does not list ${dmg##*/}. Re-run ./scripts/create-checksums.sh." >&2
+if [[ "$listed" != "${dmg##*/}" ]]; then
+  echo "ERROR: SHA256SUMS.txt must list exactly ${dmg##*/}; it lists:" >&2
+  while IFS= read -r name; do
+    printf '         %s\n' "$name" >&2
+  done <<< "$listed"
+  echo "       Re-run ./scripts/create-checksums.sh." >&2
   exit 1
 fi
-assets=()
-while IFS= read -r name; do
-  assets+=("$out/$name")
-done <<< "$listed"
-assets+=("$out/SHA256SUMS.txt")
+assets=("$dmg" "$out/SHA256SUMS.txt")
 
 echo "==> Verifying stapled notarization on DMG (failure aborts publish)..."
 xcrun stapler validate "$dmg"
