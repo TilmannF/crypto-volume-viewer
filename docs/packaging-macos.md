@@ -22,10 +22,12 @@ Every packaging run collects output under `dist/macos/<version>/` (version read 
 ```text
 dist/macos/<version>/
   Crypto Volume Viewer.app
-  Crypto Volume Viewer_<version>_<arch>.dmg
+  Crypto.Volume.Viewer_<version>_<arch>.dmg
   SHA256SUMS.txt
   build-info.txt
 ```
+
+The DMG's file name uses `.` instead of spaces. Tauri names it `Crypto Volume Viewer_<version>_<arch>.dmg` after the product name, but GitHub rewrites release asset names outside `A-Z a-z 0-9 . _ -` on upload (a space becomes `.`). For v0.1.0 this meant `SHA256SUMS.txt` listed `Crypto Volume Viewer_0.1.0_aarch64.dmg` while the release served `Crypto.Volume.Viewer_0.1.0_aarch64.dmg`, so `shasum -a 256 -c SHA256SUMS.txt` failed for every downloader even though the bytes were correct. Both packaging scripts therefore copy the DMG into `dist/` under the name GitHub keeps unchanged (`release_asset_name` in `scripts/lib/packaging-common.sh`), and every name that gets hashed or uploaded must pass `require_release_safe_name`.
 
 `RELEASE_NOTES.md` lives at the repository root (not copied per-version). `dist/` is gitignored — built artifacts are never committed. Public downloads are GitHub Release assets, not git files.
 
@@ -89,9 +91,9 @@ If `APPLE_SIGNING_IDENTITY` is missing, or neither credential set is complete, `
 codesign --verify --deep --strict --verbose=2 "Crypto Volume Viewer.app"
 codesign -dv --verbose=4 "Crypto Volume Viewer.app"
 spctl --assess --type execute --verbose=4 "Crypto Volume Viewer.app"
-spctl --assess --type open --context context:primary-signature --verbose=4 "Crypto Volume Viewer.dmg"
+spctl --assess --type open --context context:primary-signature --verbose=4 "Crypto.Volume.Viewer_<version>_<arch>.dmg"
 xcrun stapler validate "Crypto Volume Viewer.app"
-xcrun stapler validate "Crypto Volume Viewer.dmg"
+xcrun stapler validate "Crypto.Volume.Viewer_<version>_<arch>.dmg"
 ```
 
 The `spctl --assess --type open` check on the `.dmg` is treated as best-effort (a warning, not a hard failure) since its support varies by system; the two `stapler validate` checks are the authoritative, mandatory proof of a stapled notarization ticket.
@@ -104,7 +106,7 @@ Tauri notarizes and staples the `.app`, then builds the `.dmg` around that alrea
 ./scripts/create-checksums.sh
 ```
 
-Hashes the `.dmg` (and a zipped `.app`, if one exists) in `dist/macos/<version>/` with `shasum -a 256`, writing `SHA256SUMS.txt` with relative filenames. It never attempts to hash a raw `.app` directory. Both packaging scripts call it internally, but it can also be run standalone against an already-built `dist/macos/<version>/`.
+Hashes the single `.dmg` in `dist/macos/<version>/` with `shasum -a 256`, writing `SHA256SUMS.txt` with a relative filename. The DMG is the only release artifact: the `.app` bundle and `build-info.txt` in the same folder are never hashed or published, so a stray file left in `dist/` cannot end up in a release. It fails if the folder holds no `.dmg` or more than one, or if a file name is not GitHub-safe (see "Artifact layout"). `scripts/package-macos-release.sh` calls it after stapling the DMG; `scripts/package-macos-local.sh` does not, and instead deletes any earlier `SHA256SUMS.txt` so a stale checksum file never sits next to a new DMG. It can also be run standalone against an already-built `dist/macos/<version>/`.
 
 To verify a downloaded `.dmg` against `SHA256SUMS.txt`:
 
@@ -122,7 +124,11 @@ After a successful `./scripts/package-macos-release.sh` (`.dmg` passes `xcrun st
 ./scripts/publish-github-release.sh
 ```
 
-This creates git tag `v<version>` and a GitHub Release attaching the `.dmg` and `SHA256SUMS.txt`, using `RELEASE_NOTES.md` as the release body. It does not build or notarize. CI does not produce this artifact — signing and notarization stay on the local Mac with the Developer ID identity.
+This creates git tag `v<version>` and a GitHub Release attaching exactly the `.dmg` and `SHA256SUMS.txt` (nothing else from `dist/`), using `RELEASE_NOTES.md` as the release body. It does not build or notarize. CI does not produce this artifact — signing and notarization stay on the local Mac with the Developer ID identity.
+
+Before creating anything, the script checks that `dist/macos/<version>/` holds exactly one `.dmg`, that `SHA256SUMS.txt` lists exactly that DMG under a GitHub-safe name, that `shasum -a 256 -c` passes there, that the DMG has a stapled ticket, and that the release does not exist yet. The last check reads HTTP statuses from the GitHub API (`github_release_state` in `scripts/lib/packaging-common.sh`): the repository must answer `200`, and only a `200` (exists) or `404` (absent) for the tag counts as an answer. Anything else, such as bad credentials (`401`), no network, or an API error, stops the script, because `gh release view` exits `1` for "not found" and for all of those alike. `./scripts/publish-github-release.sh --dry-run` runs all of these checks and stops before creating the release, so a passing dry run also proves that `gh` can reach the repository.
+
+After publishing, it runs `./scripts/verify-github-release.sh v<version>`, which downloads the release into an empty temporary directory and checks it the way a user would: `shasum -a 256 -c SHA256SUMS.txt` passes, every asset is listed in `SHA256SUMS.txt`, and every `.dmg` has a stapled notarization ticket. If that fails, the release is already live; the script says so and exits non-zero. `verify-github-release.sh [tag]` is read-only and can be run on its own against any published release.
 
 ## What is not covered by this milestone
 

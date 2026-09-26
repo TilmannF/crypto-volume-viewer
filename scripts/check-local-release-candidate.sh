@@ -35,6 +35,7 @@ main() {
     bash -c "cd '$root' && cargo clippy --workspace --all-targets --all-features -- -D warnings"
   run_check "cargo test --workspace --all-targets" bash -c "cd '$root' && cargo test --workspace --all-targets"
   run_check "cargo doc --workspace --no-deps" bash -c "cd '$root' && cargo doc --workspace --no-deps"
+  run_check "scripts/test-packaging-common.sh" "$root/scripts/test-packaging-common.sh"
 
   run_check "npm run typecheck" bash -c "cd '$root/apps/cryptovol-gui' && npm run typecheck"
   run_check "npm run build" bash -c "cd '$root/apps/cryptovol-gui' && npm run build"

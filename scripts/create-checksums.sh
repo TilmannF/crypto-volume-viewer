@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Writes SHA256SUMS.txt for the current version's packaged macOS artifacts.
-# Hashes the .dmg and, if present, a zipped .app archive -- never a raw
-# .app directory (shasum has no meaningful notion of hashing a directory).
+# Hashes exactly the single .dmg, the only release artifact; other files in
+# dist/ (the .app bundle, build-info.txt) are never listed or published.
+# The hashed name must be GitHub-safe (see release_asset_name).
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -12,25 +13,19 @@ main() {
   local out_dir
   out_dir="$(dist_dir)"
 
-  local dmg_name app_zip_name
-  dmg_name="$(cd "$out_dir" && find . -maxdepth 1 -iname '*.dmg' -print -quit 2>/dev/null || true)"
-  app_zip_name="$(cd "$out_dir" && find . -maxdepth 1 -iname '*.app.zip' -print -quit 2>/dev/null || true)"
-
-  if [[ -z "$dmg_name" ]]; then
-    echo "ERROR: no .dmg found in $out_dir -- run scripts/package-macos-local.sh or scripts/package-macos-release.sh first." >&2
+  local dmg
+  if ! dmg="$(single_dmg_in "$out_dir")"; then
+    echo "       Run scripts/package-macos-local.sh or scripts/package-macos-release.sh first." >&2
     exit 1
   fi
 
+  # The name hashed here is the name published; GitHub would rename an
+  # unsafe one on upload and break `shasum -c` for every downloader.
+  local dmg_name="${dmg##*/}"
+  require_release_safe_name "$dmg_name"
+
   local sums_file="$out_dir/SHA256SUMS.txt"
-  (
-    cd "$out_dir"
-    {
-      shasum -a 256 "${dmg_name#./}"
-      if [[ -n "$app_zip_name" ]]; then
-        shasum -a 256 "${app_zip_name#./}"
-      fi
-    } > "$sums_file"
-  )
+  (cd "$out_dir" && shasum -a 256 "$dmg_name" > "$sums_file")
 
   echo "==> Wrote $sums_file"
   cat "$sums_file"

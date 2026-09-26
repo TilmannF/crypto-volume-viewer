@@ -143,7 +143,7 @@ See [packaging-macos.md](packaging-macos.md) for the full reference (artifact la
   ./scripts/create-checksums.sh
   ```
 
-  Confirm `dist/macos/<version>/SHA256SUMS.txt` lists the `.dmg` with a relative filename.
+  Confirm `dist/macos/<version>/SHA256SUMS.txt` lists the `.dmg` with a relative filename that contains no spaces (e.g. `Crypto.Volume.Viewer_<version>_aarch64.dmg`). GitHub renames asset names with spaces on upload, which breaks `shasum -c` for downloaders; the script refuses such names.
 
 - [ ] Review `dist/macos/<version>/build-info.txt` for accuracy (version, commit, signing mode — should read `unsigned`/`ad-hoc` for a local build or `signed+notarized` for a release build, never overstated).
 
@@ -158,14 +158,21 @@ See [packaging-macos.md](packaging-macos.md) for the full reference (artifact la
 
 - [ ] Confirm `xcrun stapler validate` passes on both the `.app` and the `.dmg` in `dist/macos/<version>/`.
 - [ ] Confirm `RELEASE_NOTES.md` matches this version.
+- [ ] Run the pre-publish checks without publishing:
+
+  ```bash
+  ./scripts/publish-github-release.sh --dry-run
+  ```
+
+  It must end with "Dry run: all checks passed" and list exactly the `.dmg` and `SHA256SUMS.txt`. It fails if `gh` cannot reach the repository (not logged in, bad token, no network), so fix that before publishing.
 - [ ] Publish:
 
   ```bash
   ./scripts/publish-github-release.sh
   ```
 
-  This creates tag `v<version>` and attaches the `.dmg` plus `SHA256SUMS.txt`.
-- [ ] Open the release URL and confirm the DMG downloads.
+  This creates tag `v<version>`, attaches the `.dmg` plus `SHA256SUMS.txt`, then downloads the release and verifies it (`./scripts/verify-github-release.sh`). It must end with "Release v<version> verified". If verification fails, the release is already live: fix its assets before announcing it.
+- [ ] Open the release URL and confirm the DMG downloads and its name matches the one in `SHA256SUMS.txt`.
 
 ## 12. Rollback Notes
 
@@ -174,4 +181,4 @@ See [packaging-macos.md](packaging-macos.md) for the full reference (artifact la
 
 ## `scripts/check-local-release-candidate.sh`
 
-Runs the Rust checks (section 2) and the GUI checks (section 3), including `npm run test:e2e`, keeps going after a failure, and prints a PASS/FAIL summary. It exits non-zero if any check failed. It does not cover the fixture-gated tests, VeraCrypt scripts, packaging, or manual smoke tests; this checklist remains the single source of truth for the release process.
+Runs the Rust checks (section 2), `scripts/test-packaging-common.sh` (the release-asset name and checksum helpers used by the packaging and publish scripts), and the GUI checks (section 3), including `npm run test:e2e`, keeps going after a failure, and prints a PASS/FAIL summary. It exits non-zero if any check failed. It does not cover the fixture-gated tests, VeraCrypt scripts, packaging, or manual smoke tests; this checklist remains the single source of truth for the release process.
