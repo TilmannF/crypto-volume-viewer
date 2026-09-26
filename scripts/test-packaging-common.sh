@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
-# Tests the release-asset helpers in scripts/lib/packaging-common.sh:
-# GitHub-safe asset names, single-DMG selection, and SHA256SUMS.txt checks,
-# including the v0.1.0 case (SHA256SUMS.txt listed a name with spaces that
-# GitHub had renamed on upload). Needs only bash and shasum; no network.
+# Tests the release helpers in scripts/lib/packaging-common.sh: GitHub-safe
+# asset names, single-DMG selection, SHA256SUMS.txt checks (including the
+# v0.1.0 case, where SHA256SUMS.txt listed a name with spaces that GitHub had
+# renamed on upload), and the release-exists lookup. Needs only bash and
+# shasum; `gh` is replaced by a stub, so no network access.
 set -uo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/packaging-common.sh
 source "$script_dir/lib/packaging-common.sh"
 set +e  # the helpers are expected to fail in the negative cases below
+cd "$script_dir"  # github_release_state resolves the repository from the checkout
 
 T="$(mktemp -d)"
 trap 'rm -rf "$T"' EXIT
@@ -61,6 +63,28 @@ mkdir -p "$T/empty"; : > "$T/empty/SHA256SUMS.txt"; bad check_sums_file "$T/empt
 mkdir -p "$T/malformed"; echo "not a hash line" > "$T/malformed/SHA256SUMS.txt"; bad check_sums_file "$T/malformed"
 # binary-mode line ("<hash> *name") is accepted
 mkdir -p "$T/binmode"; printf 'x' > "$T/binmode/X.dmg"; (cd "$T/binmode" && shasum -a 256 -b X.dmg > SHA256SUMS.txt); ok check_sums_file "$T/binmode"
+
+# github_release_state: `gh` is replaced by a function answering each API
+# path with the HTTP status in STUB_REPO / STUB_TAG (empty = no response).
+gh() {
+  local s=""
+  case "$3" in
+    "repos/{owner}/{repo}") s="$STUB_REPO" ;;
+    "repos/{owner}/{repo}/releases/tags/"*) s="$STUB_TAG" ;;
+  esac
+  [[ -z "$s" ]] && return 1
+  printf 'HTTP/2.0 %s X\n\n' "$s"
+  [[ "$s" == "200" ]]
+}
+state() { STUB_REPO="$1" STUB_TAG="$2" github_release_state v9.9.9 2>/dev/null; }
+eq "$(state 200 404)" "absent"
+eq "$(state 200 200)" "exists"
+bad state 401 404   # bad credentials
+bad state "" 404    # no response: logged out or no network
+bad state 404 404   # repository not visible: a 404 on the tag would prove nothing
+bad state 200 502   # API error on the tag lookup
+bad state 200 ""    # no response on the tag lookup
+bad state 200 401
 
 echo "passed=$pass failed=$fail"
 [[ $fail -eq 0 ]]

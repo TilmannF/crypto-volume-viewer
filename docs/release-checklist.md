@@ -164,7 +164,7 @@ See [packaging-macos.md](packaging-macos.md) for the full reference (artifact la
   ./scripts/publish-github-release.sh --dry-run
   ```
 
-  It must end with "Dry run: all checks passed" and list exactly the `.dmg` and `SHA256SUMS.txt`.
+  It must end with "Dry run: all checks passed" and list exactly the `.dmg` and `SHA256SUMS.txt`. It fails if `gh` cannot reach the repository (not logged in, bad token, no network), so fix that before publishing.
 - [ ] Publish:
 
   ```bash

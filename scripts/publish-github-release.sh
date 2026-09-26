@@ -65,7 +65,11 @@ assets+=("$out/SHA256SUMS.txt")
 echo "==> Verifying stapled notarization on DMG (failure aborts publish)..."
 xcrun stapler validate "$dmg"
 
-if gh release view "$tag" >/dev/null 2>&1; then
+echo "==> Checking that GitHub release $tag does not exist yet..."
+if ! state="$(github_release_state "$tag")"; then
+  exit 1
+fi
+if [[ "$state" == "exists" ]]; then
   echo "ERROR: GitHub release $tag already exists." >&2
   exit 1
 fi

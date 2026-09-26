@@ -133,6 +133,42 @@ verify_release_dir() {
   done
 }
 
+# Prints the HTTP status of a GitHub API GET for path $1 (relative to the API
+# root; "{owner}/{repo}" resolves to this checkout's origin), or nothing if
+# no response arrived. Never fails: callers decide what each status means.
+github_api_status() {
+  local path="$1"
+  (cd "$(project_root)" && gh api -i "$path" 2>/dev/null || true) | head -n 1 | awk '{print $2}'
+}
+
+# Prints "exists" or "absent" for GitHub release tag $1 of this repository.
+# Fails when the lookup gives no definite answer (missing or bad auth, no
+# network, API error): `gh release view` exits 1 for "not found" and for all
+# of these alike, so HTTP statuses are checked instead. The repository itself
+# must answer 200 first, because GitHub also returns 404 for a release in a
+# repository the token cannot see.
+github_release_state() {
+  local tag="$1"
+  local repo_status release_status
+  repo_status="$(github_api_status "repos/{owner}/{repo}")"
+  if [[ "$repo_status" != "200" ]]; then
+    echo "ERROR: could not reach this repository on GitHub (${repo_status:+HTTP }${repo_status:-no response})." >&2
+    echo "       Check 'gh auth status' and the network." >&2
+    return 1
+  fi
+
+  release_status="$(github_api_status "repos/{owner}/{repo}/releases/tags/$tag")"
+  case "$release_status" in
+    200) echo "exists" ;;
+    404) echo "absent" ;;
+    *)
+      echo "ERROR: could not check whether GitHub release $tag exists (${release_status:+HTTP }${release_status:-no response})." >&2
+      echo "       Check 'gh auth status' and the network." >&2
+      return 1
+      ;;
+  esac
+}
+
 # Writes "$(dist_dir)/build-info.txt". Usage:
 #   write_build_info <signing-mode: unsigned|signed|signed+notarized> <artifact-filename>...
 # Contains no credential values and no local OS username -- only tool
